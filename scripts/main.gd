@@ -481,7 +481,7 @@ func _build_ui() -> void:
     root_ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
     ui_layer.add_child(root_ui)
 
-    day_button = _button("Day 1 · 8:00 AM", _cycle_speed, Vector2(180, 60))
+    day_button = _button("Day 1 · 8:00 AM", _open_day_schedule, Vector2(180, 60))
     day_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
     day_button.position = Vector2(18, 18)
     day_button.add_theme_stylebox_override("normal", _panel_style(Color(0.62, 0.80, 0.82, 0.96), 28))
@@ -1765,8 +1765,8 @@ func _refresh_clock() -> void:
     if display_hour == 0:
         display_hour = 12
     var symbol := "☀" if hour >= 6 and hour < 18 else "☾"
-    var speed_text := " · PAUSED" if sim_speed == 0.0 else " · %dx" % int(sim_speed)
-    day_button.text = "%s Day %d · %d:%02d %s%s" % [symbol, world_day, display_hour, minute, suffix, speed_text]
+    var pause_text := " • PAUSED" if sim_speed == 0.0 else ""
+    day_button.text = "%s Day %d · %d:%02d %s%s" % [symbol, world_day, display_hour, minute, suffix, pause_text]
     if sun:
         var daylight := clampf(sin((world_minutes / (24.0 * 60.0)) * TAU - PI * 0.5) * 0.55 + 0.65, 0.18, 1.0)
         sun.light_energy = 0.30 + daylight * 0.58
@@ -1980,6 +1980,36 @@ func _clear_context_buttons() -> void:
         return
     for i in range(context_box.get_child_count() - 1, 0, -1):
         context_box.get_child(i).queue_free()
+
+func _open_day_schedule() -> void:
+    _clear_context_buttons()
+    context_title.text = "DAY %d" % world_day
+    var total := int(world_minutes)
+    var hour := (total / 60) % 24
+    var minute := total % 60
+    var suffix := "AM" if hour < 12 else "PM"
+    var display_hour := hour % 12
+    if display_hour == 0:
+        display_hour = 12
+    var now_label := _label("%d:%02d %s • %s" % [display_hour, minute, suffix, household.current_lot])
+    now_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    context_box.add_child(now_label)
+
+    var slime := household.selected_slime()
+    if slime:
+        var obligation := _next_obligation_text(slime)
+        if not obligation.is_empty():
+            var schedule_label := _label("Next: " + obligation)
+            schedule_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+            context_box.add_child(schedule_label)
+    if household.bills_due > 0:
+        context_box.add_child(_button("Pay Bills • ◉ %d" % household.bills_due, _pay_bills, Vector2(230, 44)))
+    if not household.event_name.is_empty():
+        var event_label := _label("%s • %ds left" % [household.event_name, int(household.event_timer)])
+        event_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        context_box.add_child(event_label)
+    context_panel.visible = true
+    _place_context(Vector2(150, 86))
 
 func _show_object_context(item: Dictionary, screen_pos: Vector2) -> void:
     _tutorial_advance(2)
