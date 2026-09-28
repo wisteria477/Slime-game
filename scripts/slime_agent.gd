@@ -104,7 +104,6 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     _build_character()
     _apply_age_scale()
     _apply_appearance()
-    _apply_appearance()
     _update_emotion()
 
 func _physics_process(_delta: float) -> void:
@@ -221,6 +220,9 @@ func restore(data: Dictionary) -> void:
     var pos: Array = data.get("position", [global_position.x, global_position.y, global_position.z])
     global_position = Vector3(float(pos[0]), float(pos[1]), float(pos[2]))
     _apply_age_scale()
+    _apply_appearance()
+    if life_state == "ghost":
+        _set_ghost_visual(true)
 
 func _build_character() -> void:
     var shape := CollisionShape3D.new()
@@ -465,8 +467,7 @@ func become_ghost() -> void:
     needs["hunger"] = 100.0
     needs["bladder"] = 100.0
     add_moodlet("Became a Spirit", "Fine", 1.0, 999999.0)
-    if visual_root:
-        visual_root.modulate = Color(0.75, 0.90, 1.0, 0.62) if "modulate" in visual_root else Color.WHITE
+    _set_ghost_visual(true)
     current_activity = "Haunting peacefully"
 
 func revive() -> void:
@@ -474,8 +475,42 @@ func revive() -> void:
         return
     life_state = "living"
     danger_timer = 0.0
+    _set_ghost_visual(false)
     add_moodlet("Back to Life", "Happy", 12.0, 30.0)
     current_activity = "Alive again"
+
+func _set_ghost_visual(enabled: bool) -> void:
+    if visual_root == null:
+        return
+    _set_ghost_visual_recursive(visual_root, enabled)
+
+func _set_ghost_visual_recursive(node: Node, enabled: bool) -> void:
+    if node is MeshInstance3D:
+        var mesh_node := node as MeshInstance3D
+        if mesh_node.mesh:
+            for surface in range(mesh_node.mesh.get_surface_count()):
+                var active := mesh_node.get_active_material(surface)
+                if active == null:
+                    active = mesh_node.material_override
+                if active is StandardMaterial3D:
+                    var copy := (active as StandardMaterial3D).duplicate() as StandardMaterial3D
+                    if enabled:
+                        copy.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+                        var color := copy.albedo_color
+                        copy.albedo_color = Color(
+                            clampf(color.r * 0.72 + 0.18, 0.0, 1.0),
+                            clampf(color.g * 0.86 + 0.12, 0.0, 1.0),
+                            1.0,
+                            0.52
+                        )
+                        copy.emission_enabled = true
+                        copy.emission = Color("8bdcff")
+                        copy.emission_energy_multiplier = 0.35
+                    else:
+                        copy.albedo_color.a = 1.0
+                    mesh_node.set_surface_override_material(surface, copy)
+    for child in node.get_children():
+        _set_ghost_visual_recursive(child, enabled)
 
 func _decay_needs(delta: float) -> void:
     var rates := {
