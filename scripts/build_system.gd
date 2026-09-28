@@ -601,6 +601,30 @@ func _make_door_visual(root: Node3D, center: Vector3, orientation: String) -> vo
     threshold.material_override = _material(Color("3e342d"), 0.96)
     root.add_child(threshold)
 
+    var door_panel := MeshInstance3D.new()
+    var door_mesh := BoxMesh.new()
+    door_mesh.size = Vector3(width * 0.72, WALL_HEIGHT * 0.82, 0.07) if orientation == "N" else Vector3(0.07, WALL_HEIGHT * 0.82, width * 0.72)
+    door_panel.mesh = door_mesh
+    door_panel.position = center - Vector3(0, WALL_HEIGHT * 0.08, 0)
+    door_panel.material_override = _material(Color("8b6b52"), 0.86)
+    root.add_child(door_panel)
+
+    var knob := MeshInstance3D.new()
+    var knob_mesh := SphereMesh.new()
+    knob_mesh.radius = 0.055
+    knob_mesh.height = 0.11
+    knob.mesh = knob_mesh
+    if orientation == "N":
+        knob.position = door_panel.position + Vector3(width * 0.24, 0, -0.06)
+    else:
+        knob.position = door_panel.position + Vector3(-0.06, 0, width * 0.24)
+    var knob_mat := StandardMaterial3D.new()
+    knob_mat.albedo_color = Color("c9a45f")
+    knob_mat.metallic = 0.7
+    knob_mat.roughness = 0.28
+    knob.material_override = knob_mat
+    root.add_child(knob)
+
 func _place_furniture(cell: Vector2i, kind: String) -> void:
     if not floors.has(_cell_key(cell)):
         return
@@ -802,22 +826,51 @@ func _place_window(cell: Vector2i, orientation: String) -> void:
     var o := "W" if orientation == "W" else "N"
     var root := Node3D.new()
     root.name = "Window_%d_%d_%s_%d" % [cell.x, cell.y, o, windows.size()]
-    var frame := MeshInstance3D.new()
-    var frame_mesh := BoxMesh.new()
-    frame_mesh.size = Vector3(CELL_SIZE * 0.74, 0.78, 0.06) if o == "N" else Vector3(0.06, 0.78, CELL_SIZE * 0.74)
-    frame.mesh = frame_mesh
-    frame.position = cell_to_world(cell) + Vector3(0, 1.05, 0)
+    var center := cell_to_world(cell) + Vector3(0, 1.05, 0)
     if o == "N":
-        frame.position.z -= CELL_SIZE * 0.5 - 0.02
+        center.z -= CELL_SIZE * 0.5 - 0.02
     else:
-        frame.position.x -= CELL_SIZE * 0.5 - 0.02
+        center.x -= CELL_SIZE * 0.5 - 0.02
+
+    var glass_node := MeshInstance3D.new()
+    var glass_mesh := BoxMesh.new()
+    glass_mesh.size = Vector3(CELL_SIZE * 0.70, 0.72, 0.035) if o == "N" else Vector3(0.035, 0.72, CELL_SIZE * 0.70)
+    glass_node.mesh = glass_mesh
+    glass_node.position = center
     var glass := StandardMaterial3D.new()
-    glass.albedo_color = Color(0.45, 0.78, 0.86, 0.48)
+    glass.albedo_color = Color(0.52, 0.80, 0.86, 0.38)
     glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    glass.metallic = 0.0
-    glass.roughness = 0.12
-    frame.material_override = glass
-    root.add_child(frame)
+    glass.metallic = 0.04
+    glass.roughness = 0.08
+    glass_node.material_override = glass
+    root.add_child(glass_node)
+
+    var frame_color := Color("5a4a3d")
+    for side in [-1.0, 1.0]:
+        var vertical := MeshInstance3D.new()
+        var vmesh := BoxMesh.new()
+        vmesh.size = Vector3(0.08, 0.86, 0.08)
+        vertical.mesh = vmesh
+        vertical.position = center + (Vector3(side * CELL_SIZE * 0.37, 0, 0) if o == "N" else Vector3(0, 0, side * CELL_SIZE * 0.37))
+        vertical.material_override = _material(frame_color, 0.90)
+        root.add_child(vertical)
+    for vertical_side in [-1.0, 1.0]:
+        var horizontal := MeshInstance3D.new()
+        var hmesh := BoxMesh.new()
+        hmesh.size = Vector3(CELL_SIZE * 0.82, 0.08, 0.08) if o == "N" else Vector3(0.08, 0.08, CELL_SIZE * 0.82)
+        horizontal.mesh = hmesh
+        horizontal.position = center + Vector3(0, vertical_side * 0.40, 0)
+        horizontal.material_override = _material(frame_color, 0.90)
+        root.add_child(horizontal)
+
+    var cross := MeshInstance3D.new()
+    var cross_mesh := BoxMesh.new()
+    cross_mesh.size = Vector3(0.06, 0.72, 0.06)
+    cross.mesh = cross_mesh
+    cross.position = center
+    cross.material_override = _material(frame_color, 0.90)
+    root.add_child(cross)
+
     wall_root.add_child(root)
     windows.append({"cell":[cell.x, cell.y], "orientation":o})
 
