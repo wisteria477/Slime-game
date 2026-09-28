@@ -3,6 +3,7 @@ extends Node
 
 signal household_changed
 signal selection_changed(slime)
+signal notification(text: String)
 
 var slime_root: Node3D
 var build_system: SlimeBuildSystem
@@ -70,6 +71,7 @@ func add_slime(name_text: String, color: Color, stage := "adult", personality :=
     next_number += 1
     slime_root.add_child(slime)
     slime.setup(new_id, clean_name, color, stage, build_system, self, personality, habits, appearance)
+    slime.event_message.connect(notification.emit)
     var spawn := build_system.find_spawn_cell(Vector2i(4 + (slimes.size() % 3), 5))
     slime.global_position = build_system.cell_to_world(spawn) + Vector3(0, 0.02, 0)
     slimes.append(slime)
@@ -266,6 +268,7 @@ func _finish_event() -> void:
     for slime in slimes:
         slime.satisfaction += int(clampf(event_score, 0.0, 100.0))
         slime.add_moodlet("%s complete" % finished_name, "Happy", 7.0, 22.0)
+    notification.emit("%s complete • earned %d puddle coins" % [finished_name, reward])
     event_name = ""
     event_score = 0.0
     household_changed.emit()
@@ -280,6 +283,7 @@ func tick_world(day: int, hour: int, minute: int, delta: float) -> void:
     if day > last_billed_day and day % 3 == 0 and hour == 8 and minute == 0:
         last_billed_day = day
         bills_due += 90 + int(float(build_system.home_value()) * 0.025)
+        notification.emit("Bills arrived: %d puddle coins" % bills_due)
 
     if hour == 7 and minute == 0:
         for slime in slimes:
@@ -309,6 +313,7 @@ func tick_world(day: int, hour: int, minute: int, delta: float) -> void:
                 slime.career_level += 1
                 funds += 100
                 slime.add_moodlet("Promotion", "Happy", 12.0, 30.0)
+                notification.emit("%s was promoted to %s Lv.%d" % [slime.display_name, slime.career, slime.career_level])
                 _unlock_achievement("career_two")
 
     if slimes.size() >= 5:
