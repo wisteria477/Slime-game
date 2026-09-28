@@ -69,6 +69,7 @@ var action_kind := ""
 var action_timer := 0.0
 var think_timer := 0.0
 var target_slime_id := ""
+var target_object_id := ""
 var visual_root: Node3D
 var selection_disc: MeshInstance3D
 var state_label: Label3D
@@ -428,6 +429,42 @@ func _priority_score(key: String) -> float:
 
 func _choose_next_goal() -> void:
     _plan_action_queue()
+
+    if age_stage in ["young_adult", "adult"]:
+        var baby: SlimeAgent = household.find_needy_baby(slime_id)
+        if baby != null and (skill_level("parenting") > 0 or rng.randf() < 0.55):
+            target_slime_id = baby.slime_id
+            target_object_id = ""
+            action_kind = "care_baby"
+            current_activity = "Caring for %s" % baby.display_name
+            _set_path_to(baby.current_cell())
+            state_label.text = "Care"
+            return
+
+    if personality == "Neat" or habits.has("Tidy Routine"):
+        var dirty: Dictionary = build_system.find_problem_object("dirty", current_cell())
+        if not dirty.is_empty() and rng.randf() < 0.75:
+            var dirty_item: Dictionary = dirty["item"]
+            target_object_id = String(dirty_item.get("id", ""))
+            target_slime_id = ""
+            action_kind = "clean_object"
+            current_activity = "Cleaning"
+            _set_path_to(dirty["cell"])
+            state_label.text = "Clean"
+            return
+
+    if skill_level("handiness") >= 1 or personality == "Independent":
+        var broken: Dictionary = build_system.find_problem_object("broken", current_cell())
+        if not broken.is_empty() and rng.randf() < 0.65:
+            var broken_item: Dictionary = broken["item"]
+            target_object_id = String(broken_item.get("id", ""))
+            target_slime_id = ""
+            action_kind = "repair_object"
+            current_activity = "Repairing"
+            _set_path_to(broken["cell"])
+            state_label.text = "Repair"
+            return
+
     var best_key := ""
     var best_score := -INF
     for key in needs.keys():
@@ -514,7 +551,36 @@ func _move_along_path() -> void:
 
 func _perform_action(delta: float) -> void:
     action_timer += delta
-    if action_kind == "social":
+    if action_kind == "care_baby":
+        var baby: SlimeAgent = household.get_slime(target_slime_id)
+        if baby == null:
+            action_kind = ""
+            return
+        if global_position.distance_to(baby.global_position) > 2.0:
+            _set_path_to(baby.current_cell())
+            return
+        var lowest_key := "hunger"
+        var lowest_value := 101.0
+        for need_key in baby.needs.keys():
+            var value := float(baby.needs[need_key])
+            if value < lowest_value:
+                lowest_value = value
+                lowest_key = String(need_key)
+        baby.needs[lowest_key] = clampf(float(baby.needs[lowest_key]) + 12.0 * delta, 0.0, NEED_MAX)
+        baby.needs["social"] = clampf(float(baby.needs["social"]) + 5.0 * delta, 0.0, NEED_MAX)
+        needs["social"] = clampf(float(needs["social"]) + 2.0 * delta, 0.0, NEED_MAX)
+        gain_skill("parenting", 1.3 * delta)
+        if action_timer >= 4.0 or float(baby.needs[lowest_key]) >= 92.0:
+            baby.add_moodlet("Cared For", "Happy", 7.0, 18.0)
+            add_moodlet("Caring Moment", "Happy", 5.0, 18.0)
+    elif action_kind == "clean_object":
+        build_system.clean_object(target_object_id, 18.0 * delta)
+        gain_skill("cleaning", 1.0 * delta)
+        needs["hygiene"] = clampf(float(needs["hygiene"]) - 0.7 * delta, 0.0, NEED_MAX)
+    elif action_kind == "repair_object":
+        build_system.repair_object(target_object_id, 14.0 * delta)
+        gain_skill("handiness", 1.2 * delta)
+    elif action_kind == "social":
         var other: SlimeAgent = household.get_slime(target_slime_id)
         if other:
             if global_position.distance_to(other.global_position) > 2.0:
@@ -546,10 +612,14 @@ func _perform_action(delta: float) -> void:
         _gain_activity_skill(action_kind, delta)
         _complete_want(_want_id_for_action(action_kind))
         _try_secondary_social(delta)
-    if action_timer >= 4.0 or float(needs.get(action_kind, 0.0)) >= 96.0:
+    var action_finished := action_timer >= 4.0
+    if action_kind in ["hunger", "energy", "hygiene", "fun", "social", "comfort"]:
+        action_finished = action_finished or float(needs.get(action_kind, 0.0)) >= 96.0
+    if action_finished:
         action_timer = 0.0
         action_kind = ""
         target_slime_id = ""
+        target_object_id = ""
         secondary_activity = ""
         current_activity = "Thinking"
         state_label.text = ""
@@ -771,4 +841,7 @@ func _action_label(key: String) -> String:
         "fun": "Play",
         "social": "Chat",
         "comfort": "Cozy",
+        "care_baby": "Care",
+        "clean_object": "Clean",
+        "repair_object": "Repair",
     }.get(key, "")
