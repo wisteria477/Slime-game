@@ -45,6 +45,10 @@ var build_button: Button
 var baby_button: Button
 var build_tray: PanelContainer
 var build_row: GridContainer
+var build_search: LineEdit
+var build_category := "All"
+var build_history: Array[Dictionary] = []
+var build_redo: Array[Dictionary] = []
 var status_label: Label
 var money_label: Label
 var life_button: Button
@@ -261,15 +265,21 @@ func _world_tap(screen_pos: Vector2) -> void:
         if world != null:
             var cell := build_system.world_to_cell(world)
             var price := build_system.tool_cost(selected_tool)
-            if price > 0 and not household.spend(price):
+            if price > 0 and not household.can_afford(price):
                 _status("Not enough puddle coins — need %d" % price)
                 return
+            _record_build_history()
+            if price > 0:
+                household.spend(price)
             if build_system.place(cell, selected_tool, wall_orientation):
                 audio_manager.build_place()
                 _status("Placed %s · -%d" % [selected_tool, price])
                 save_game(false)
-            elif price > 0:
-                household.earn(price)
+            else:
+                if price > 0:
+                    household.earn(price)
+                if not build_history.is_empty():
+                    build_history.pop_back()
         return
     _hide_context()
     if _select_slime_from_screen(screen_pos):
@@ -590,9 +600,28 @@ func _build_ui() -> void:
     build_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     build_title.add_theme_font_size_override("font_size", 20)
     build_header.add_child(build_title)
+    build_header.add_child(_button("↶", _undo_build, Vector2(58, 46)))
+    build_header.add_child(_button("↷", _redo_build, Vector2(58, 46)))
+    build_header.add_child(_button("Palette", _cycle_palette, Vector2(92, 46)))
     build_header.add_child(_button("Rotate", _rotate_wall, Vector2(88, 46)))
     build_header.add_child(_button("Level", _cycle_build_level, Vector2(88, 46)))
     build_header.add_child(_button("Done", _toggle_build, Vector2(88, 46)))
+
+    var category_row := HBoxContainer.new()
+    category_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    category_row.add_theme_constant_override("separation", 5)
+    build_box.add_child(category_row)
+    for category_name in ["All", "Structure", "Needs", "Hobbies", "Decor"]:
+        var category_button := _button(category_name, _set_build_category.bind(category_name), Vector2(104, 42))
+        category_button.add_theme_font_size_override("font_size", 13)
+        category_row.add_child(category_button)
+
+    build_search = LineEdit.new()
+    build_search.placeholder_text = "Search Build / Buy"
+    build_search.custom_minimum_size = Vector2(0, 44)
+    _style_text_field(build_search)
+    build_search.text_changed.connect(_filter_build_tools)
+    build_box.add_child(build_search)
 
     var build_scroll := ScrollContainer.new()
     build_scroll.custom_minimum_size = Vector2(0, 210)
@@ -606,9 +635,7 @@ func _build_ui() -> void:
     build_row.add_theme_constant_override("h_separation", 6)
     build_row.add_theme_constant_override("v_separation", 6)
     build_scroll.add_child(build_row)
-    for tool in ["floor", "wall", "door", "window", "bed", "food", "bath", "toy", "sofa", "toilet", "sink", "stove", "fridge", "table", "lamp", "bookshelf", "desk", "plant", "rug", "dresser", "workbench", "stairs", "platform", "roof", "erase"]:
-        var tool_button := _button(tool.capitalize(), _choose_tool.bind(tool), Vector2(112, 48))
-        build_row.add_child(tool_button)
+    _populate_build_tools()
     build_tray.visible = false
 
     status_label = Label.new()
@@ -1542,6 +1569,10 @@ func _confirm_baby() -> void:
 
 func _toggle_build() -> void:
     build_mode = not build_mode
+    if build_mode:
+        build_history.clear()
+        build_redo.clear()
+        _record_build_history()
     build_tray.visible = build_mode
     needs_panel.visible = not build_mode and household.selected_slime() != null
     build_button.visible = not build_mode
@@ -1556,6 +1587,84 @@ func _toggle_build() -> void:
     for slime in household.slimes:
         slime.sim_enabled = not build_mode
     _status("Build mode" if build_mode else "Live mode")
+
+func _build_tools_for_category() -> Array[String]:
+    var all_tools: Array[String] = ["floor", "wall", "door", "window", "stairs", "platform", "roof", "erase", "bed", "food", "bath", "sofa", "toilet", "sink", "stove", "fridge", "table", "toy", "bookshelf", "desk", "workbench", "lamp", "plant", "rug", "dresser"]
+    match build_category:
+        "Structure":
+            return ["floor", "wall", "door", "window", "stairs", "platform", "roof", "erase"]
+        "Needs":
+            return ["bed", "food", "bath", "sofa", "toilet", "sink", "stove", "fridge", "table"]
+        "Hobbies":
+            return ["toy", "bookshelf", "desk", "workbench"]
+        "Decor":
+            return ["lamp", "plant", "rug", "dresser"]
+        _:
+            return all_tools
+
+func _populate_build_tools() -> void:
+    if build_row == null:
+        return
+    for child in build_row.get_children():
+        child.queue_free()
+    var query := ""
+    if build_search:
+        query = build_search.text.strip_edges().to_lower()
+    for tool in _build_tools_for_category():
+        if not query.is_empty() and not tool.to_lower().contains(query):
+            continue
+        var price := build_system.tool_cost(tool)
+        var label := tool.capitalize()
+        if price > 0:
+            label += "\n◉ %d" % price
+        var tool_button := _button(label, _choose_tool.bind(tool), Vector2(116, 54))
+        tool_button.add_theme_font_size_override("font_size", 13)
+        build_row.add_child(tool_button)
+
+func _set_build_category(category_name: String) -> void:
+    build_category = category_name
+    _populate_build_tools()
+    _status("%s catalog" % category_name)
+
+func _filter_build_tools(_text: String) -> void:
+    _populate_build_tools()
+
+func _build_snapshot() -> Dictionary:
+    return {"house": build_system.serialize(), "funds": household.funds}
+
+func _record_build_history() -> void:
+    build_history.append(_build_snapshot())
+    while build_history.size() > 30:
+        build_history.pop_front()
+    build_redo.clear()
+
+func _restore_build_snapshot(snapshot: Dictionary) -> void:
+    build_system.deserialize(snapshot.get("house", {}))
+    household.funds = int(snapshot.get("funds", household.funds))
+    _refresh_money()
+
+func _undo_build() -> void:
+    if build_history.size() <= 1:
+        _status("Nothing to undo")
+        return
+    var current := build_history.pop_back()
+    build_redo.append(current)
+    _restore_build_snapshot(build_history.back())
+    _status("Undo")
+
+func _redo_build() -> void:
+    if build_redo.is_empty():
+        _status("Nothing to redo")
+        return
+    var snapshot := build_redo.pop_back()
+    build_history.append(snapshot)
+    _restore_build_snapshot(snapshot)
+    _status("Redo")
+
+func _cycle_palette() -> void:
+    _record_build_history()
+    var name := build_system.cycle_palette()
+    _status("Palette: %s" % name)
 
 func _choose_tool(tool: String) -> void:
     selected_tool = tool
