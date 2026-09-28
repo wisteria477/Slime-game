@@ -56,7 +56,7 @@ func clear() -> void:
     household_changed.emit()
     selection_changed.emit(null)
 
-func add_slime(name_text: String, color: Color, stage := "adult", personality := "Bubbly", habits: Array[String] = []) -> SlimeAgent:
+func add_slime(name_text: String, color: Color, stage := "adult", personality := "Bubbly", habits: Array[String] = [], appearance: Dictionary = {}) -> SlimeAgent:
     var clean_name := name_text.strip_edges()
     if clean_name.is_empty():
         clean_name = "Slime %d" % next_number
@@ -64,7 +64,7 @@ func add_slime(name_text: String, color: Color, stage := "adult", personality :=
     var new_id := "%d_%d" % [Time.get_ticks_msec(), next_number]
     next_number += 1
     slime_root.add_child(slime)
-    slime.setup(new_id, clean_name, color, stage, build_system, self, personality, habits)
+    slime.setup(new_id, clean_name, color, stage, build_system, self, personality, habits, appearance)
     var spawn := build_system.find_spawn_cell(Vector2i(4 + (slimes.size() % 3), 5))
     slime.global_position = build_system.cell_to_world(spawn) + Vector3(0, 0.02, 0)
     slimes.append(slime)
@@ -98,7 +98,13 @@ func add_baby(parent_a_id: String, parent_b_id: String, baby_name: String) -> Sl
         if inherited_habits.size() >= 2:
             break
         inherited_habits.append(habit)
-    var baby := add_slime(baby_name, mixed, "baby", inherited_personality, inherited_habits)
+    var inherited_appearance := {
+        "size": String(a.appearance.get("size", "Standard")) if rng.randf() < 0.5 else String(b.appearance.get("size", "Standard")),
+        "eyes": String(a.appearance.get("eyes", "Round")) if rng.randf() < 0.5 else String(b.appearance.get("eyes", "Round")),
+        "core": String(a.appearance.get("core", "Warm")) if rng.randf() < 0.5 else String(b.appearance.get("core", "Warm")),
+        "antenna": String(a.appearance.get("antenna", "Curl")) if rng.randf() < 0.5 else String(b.appearance.get("antenna", "Curl")),
+    }
+    var baby := add_slime(baby_name, mixed, "baby", inherited_personality, inherited_habits, inherited_appearance)
     baby.parents = [a.slime_id, b.slime_id]
     for key in baby.traits.keys():
         var source = a if rng.randf() < 0.5 else b
@@ -473,12 +479,14 @@ func deserialize(data: Dictionary) -> void:
         var restored_habits: Array[String] = []
         for habit in raw.get("habits", []):
             restored_habits.append(String(habit))
+        var restored_appearance: Dictionary = raw.get("appearance", {})
         var slime := add_slime(
             String(raw.get("name", "Slime")),
             color,
             String(raw.get("age_stage", "adult")),
             String(raw.get("personality", "Bubbly")),
-            restored_habits
+            restored_habits,
+            restored_appearance
         )
         slime.slime_id = String(raw.get("id", slime.slime_id))
         slime.restore(raw)
