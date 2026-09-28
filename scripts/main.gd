@@ -142,6 +142,8 @@ func _process(delta: float) -> void:
         last_viewport_size = viewport_size
         _apply_responsive_layout()
     _desktop_camera(delta)
+    if build_system and camera_rig and not build_mode:
+        build_system.update_cutaway_for_yaw(camera_rig.yaw, true)
     if not build_mode and sim_speed > 0.0:
         var sim_delta := delta * sim_speed
         household.tick(sim_delta)
