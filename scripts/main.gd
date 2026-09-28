@@ -10,6 +10,8 @@ const COLORS := [
     ["Pearl", Color("b9d7ff")],
 ]
 const NEEDS := ["hunger", "energy", "hygiene", "fun", "social", "comfort"]
+const PERSONALITIES := ["Bubbly", "Playful", "Neat", "Foodie", "Cozy", "Independent"]
+const HABITS := ["Snacky", "Napper", "Tidy Routine", "Toy Lover", "Chatty", "Cozy Seeker", "Wanderer", "Slow Starter"]
 const TAP_SLOP := 16.0
 
 var build_system: SlimeBuildSystem
@@ -24,6 +26,7 @@ var family_row: HBoxContainer
 var needs_panel: PanelContainer
 var needs_row: HBoxContainer
 var needs_title: Label
+var needs_profile: Label
 var build_button: Button
 var baby_button: Button
 var build_tray: PanelContainer
@@ -32,6 +35,9 @@ var status_label: Label
 var creator_dialog: AcceptDialog
 var creator_name: LineEdit
 var creator_color: OptionButton
+var creator_personality: OptionButton
+var creator_habit_a: OptionButton
+var creator_habit_b: OptionButton
 var baby_dialog: AcceptDialog
 var parent_a: OptionButton
 var parent_b: OptionButton
@@ -283,6 +289,8 @@ func _apply_responsive_layout() -> void:
     needs_panel.offset_top = -138 if portrait else -106
     needs_panel.offset_bottom = -26
     needs_title.add_theme_font_size_override("font_size", 26 if portrait else 22)
+    if needs_profile:
+        needs_profile.add_theme_font_size_override("font_size", 18 if portrait else 15)
 
     build_button.custom_minimum_size = Vector2(154, 72)
     build_button.offset_left = -176
@@ -355,6 +363,11 @@ func _build_ui() -> void:
     needs_title.add_theme_font_size_override("font_size", 22)
     needs_title.add_theme_color_override("font_color", Color("183238"))
     needs_box.add_child(needs_title)
+    needs_profile = Label.new()
+    needs_profile.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    needs_profile.add_theme_font_size_override("font_size", 15)
+    needs_profile.add_theme_color_override("font_color", Color("24474c"))
+    needs_box.add_child(needs_profile)
     needs_row = HBoxContainer.new()
     needs_row.alignment = BoxContainer.ALIGNMENT_CENTER
     needs_row.add_theme_constant_override("separation", 8)
@@ -397,20 +410,51 @@ func _build_ui() -> void:
 func _build_creator_dialog() -> void:
     creator_dialog = AcceptDialog.new()
     creator_dialog.title = "Make a Slime"
-    creator_dialog.ok_button_text = "Create"
+    creator_dialog.ok_button_text = "Create Slime"
     ui_layer.add_child(creator_dialog)
     var box := VBoxContainer.new()
-    box.custom_minimum_size = Vector2(360, 170)
+    box.custom_minimum_size = Vector2(520, 500)
+    box.add_theme_constant_override("separation", 8)
     creator_dialog.add_child(box)
+
     box.add_child(_label("Name"))
     creator_name = LineEdit.new()
     creator_name.placeholder_text = "Nim"
+    creator_name.custom_minimum_size = Vector2(0, 52)
     box.add_child(creator_name)
+
     box.add_child(_label("Color"))
     creator_color = OptionButton.new()
+    creator_color.custom_minimum_size = Vector2(0, 52)
     for option in COLORS:
         creator_color.add_item(String(option[0]))
     box.add_child(creator_color)
+
+    box.add_child(_label("Personality — changes what this slime naturally cares about"))
+    creator_personality = OptionButton.new()
+    creator_personality.custom_minimum_size = Vector2(0, 52)
+    for personality_name in PERSONALITIES:
+        creator_personality.add_item(personality_name)
+    box.add_child(creator_personality)
+
+    box.add_child(_label("Habit 1 — recurring behavior preference"))
+    creator_habit_a = OptionButton.new()
+    creator_habit_a.custom_minimum_size = Vector2(0, 52)
+    for habit_name in HABITS:
+        creator_habit_a.add_item(habit_name)
+    box.add_child(creator_habit_a)
+
+    box.add_child(_label("Habit 2"))
+    creator_habit_b = OptionButton.new()
+    creator_habit_b.custom_minimum_size = Vector2(0, 52)
+    for habit_name in HABITS:
+        creator_habit_b.add_item(habit_name)
+    box.add_child(creator_habit_b)
+
+    var hint := _label("Examples: Foodie + Snacky seeks food earlier. Playful + Toy Lover chooses play more often. Wanderer explores the house.")
+    hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    hint.add_theme_font_size_override("font_size", 15)
+    box.add_child(hint)
     creator_dialog.confirmed.connect(_confirm_creator)
 
 func _build_baby_dialog() -> void:
@@ -490,16 +534,33 @@ func _close_start_overlay() -> void:
 
 func _open_creator() -> void:
     creator_name.text = ""
-    creator_color.select(household.slimes.size() % COLORS.size())
+    var index := household.slimes.size()
+    creator_color.select(index % COLORS.size())
+    creator_personality.select(index % PERSONALITIES.size())
+    creator_habit_a.select(index % HABITS.size())
+    creator_habit_b.select((index + 3) % HABITS.size())
     creator_dialog.popup_centered()
 
 func _confirm_creator() -> void:
-    var idx := creator_color.selected
-    if idx < 0:
-        idx = 0
-    var slime := household.add_slime(creator_name.text, COLORS[idx][1], "adult")
+    var idx := maxi(creator_color.selected, 0)
+    var personality_idx := maxi(creator_personality.selected, 0)
+    var habit_a_idx := maxi(creator_habit_a.selected, 0)
+    var habit_b_idx := maxi(creator_habit_b.selected, 0)
+    if habit_a_idx == habit_b_idx:
+        habit_b_idx = (habit_b_idx + 1) % HABITS.size()
+    var chosen_habits: Array[String] = [
+        HABITS[habit_a_idx],
+        HABITS[habit_b_idx],
+    ]
+    var slime := household.add_slime(
+        creator_name.text,
+        COLORS[idx][1],
+        "adult",
+        PERSONALITIES[personality_idx],
+        chosen_habits
+    )
     household.select_slime(slime.slime_id)
-    _status("%s joined the house" % slime.display_name)
+    _status("%s joined the house — %s" % [slime.display_name, slime.profile_text()])
     save_game(false)
 
 func _open_baby() -> void:
@@ -613,6 +674,7 @@ func _refresh_needs_panel() -> void:
     if slime == null:
         return
     needs_title.text = "%s · %s" % [slime.display_name, slime.age_stage]
+    needs_profile.text = "%s   •   %s" % [slime.profile_text(), slime.activity_text()]
     for key in NEEDS:
         var box := VBoxContainer.new()
         box.custom_minimum_size = Vector2(86, 42)
@@ -637,6 +699,7 @@ func _refresh_needs_values() -> void:
     if slime == null:
         return
     needs_title.text = "%s · %s" % [slime.display_name, slime.age_stage]
+    needs_profile.text = "%s   •   %s" % [slime.profile_text(), slime.activity_text()]
     for key in NEEDS:
         var bar := needs_row.find_child("Need_%s" % key, true, false)
         if bar is ProgressBar:
