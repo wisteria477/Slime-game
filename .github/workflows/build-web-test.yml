@@ -79,8 +79,7 @@ jobs:
           test -n "$(find build/web -maxdepth 1 -name '*.wasm' -print -quit)"
           test -n "$(find build/web -maxdepth 1 -name '*.pck' -print -quit)"
           touch build/web/.nojekyll
-          printf '%s
-' "Slime Life phone test — built from commit ${GITHUB_SHA}" > build/web/build.txt
+          echo "Slime Life phone test - built from commit ${GITHUB_SHA}" > build/web/build.txt
           ls -lh build/web
 
       - name: Publish gh-pages branch
