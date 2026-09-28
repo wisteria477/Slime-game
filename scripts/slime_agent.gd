@@ -16,6 +16,13 @@ const PERSONALITY_NEED_BONUS := {
     "Independent": {"comfort": 10.0, "energy": 8.0, "social": -10.0},
 }
 
+const HOBBY_DATA := {
+    "Tinkering": {"object": "workbench", "skill": "handiness", "emotion": "Focused"},
+    "Reading": {"object": "bookshelf", "skill": "logic", "emotion": "Focused"},
+    "Creative Project": {"object": "desk", "skill": "creativity", "emotion": "Inspired"},
+    "Toy Design": {"object": "toy", "skill": "creativity", "emotion": "Playful"},
+}
+
 const HABIT_NEED_BONUS := {
     "Snacky": {"hunger": 18.0},
     "Napper": {"energy": 18.0},
@@ -66,6 +73,12 @@ var reward_traits: Array[String] = []
 var routine_memory: Dictionary = {}
 var life_state := "living"
 var danger_timer := 0.0
+var favorite_hobby := ""
+var project_progress := 0.0
+var project_name := ""
+var engrossed := false
+var engrossed_time := 0.0
+var action_phase := ""
 var want_refresh_timer := 0.0
 var age_seconds := 0.0
 var sim_enabled := true
@@ -104,6 +117,8 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     household = household_ref
     rng.seed = hash(slime_id)
     idle_phase = rng.randf_range(0.0, TAU)
+    favorite_hobby = _default_hobby()
+    project_name = "%s Project" % favorite_hobby
     aspiration = SlimeLifeRules.default_aspiration(personality)
     wants = SlimeLifeRules.random_wants(rng, 3)
     fears = [SlimeLifeRules.random_fear(rng)]
@@ -187,6 +202,11 @@ func serialize() -> Dictionary:
         "routine_memory": routine_memory.duplicate(true),
         "life_state": life_state,
         "danger_timer": danger_timer,
+        "favorite_hobby": favorite_hobby,
+        "project_progress": project_progress,
+        "project_name": project_name,
+        "engrossed": engrossed,
+        "engrossed_time": engrossed_time,
         "age_seconds": age_seconds,
         "position": [global_position.x, global_position.y, global_position.z],
     }
@@ -228,6 +248,11 @@ func restore(data: Dictionary) -> void:
     routine_memory = data.get("routine_memory", {}).duplicate(true)
     life_state = String(data.get("life_state", "living"))
     danger_timer = float(data.get("danger_timer", 0.0))
+    favorite_hobby = String(data.get("favorite_hobby", _default_hobby()))
+    project_progress = float(data.get("project_progress", 0.0))
+    project_name = String(data.get("project_name", "%s Project" % favorite_hobby))
+    engrossed = bool(data.get("engrossed", false))
+    engrossed_time = float(data.get("engrossed_time", 0.0))
     age_seconds = float(data.get("age_seconds", 0.0))
     var pos: Array = data.get("position", [global_position.x, global_position.y, global_position.z])
     global_position = Vector3(float(pos[0]), float(pos[1]), float(pos[2]))
@@ -407,21 +432,21 @@ func _animate_current_action(now: float) -> void:
     var beat := sin(now * 1.55)
     var quick := sin(now * 2.8)
     match action_kind:
-        "energy":
+        "energy", "sleep":
             visual_root.scale.x *= 1.20
             visual_root.scale.y *= 0.58
             visual_root.scale.z *= 1.12
             visual_root.position.y = 0.03 + sin(now * 0.45) * 0.01
             visual_root.rotation.z = sin(now * 0.42) * 0.025
-        "hunger":
+        "hunger", "cook", "eat":
             visual_root.position.y = maxf(0.0, beat) * 0.07
             visual_root.rotation.x = deg_to_rad(-6.0 + quick * 2.5)
             visual_root.scale.y *= 1.0 + maxf(0.0, quick) * 0.035
-        "hygiene":
+        "hygiene", "bathe", "wash_up":
             visual_root.position.x = quick * 0.045
             visual_root.rotation.z = quick * 0.07
             visual_root.scale.x *= 1.0 + absf(quick) * 0.025
-        "fun":
+        "fun", "hobby":
             var hop := maxf(0.0, sin(now * 2.2))
             visual_root.position.y = hop * 0.20
             visual_root.rotation.z = sin(now * 1.4) * 0.14
@@ -432,12 +457,12 @@ func _animate_current_action(now: float) -> void:
         "social":
             visual_root.position.y = maxf(0.0, beat) * 0.055
             visual_root.rotation.z = sin(now * 1.25) * 0.075
-        "comfort":
+        "comfort", "relax":
             visual_root.scale.x *= 1.12
             visual_root.scale.y *= 0.84
             visual_root.scale.z *= 1.08
             visual_root.position.y = 0.02
-        "bladder":
+        "bladder", "bathroom":
             visual_root.position.x = sin(now * 2.5) * 0.025
             visual_root.scale.y *= 0.97 + absf(quick) * 0.025
         "clean_object":
@@ -646,13 +671,13 @@ func _set_ghost_visual_recursive(node: Node, enabled: bool) -> void:
 
 func _decay_needs(delta: float) -> void:
     var rates := {
-        "hunger": 0.34,
-        "energy": 0.22,
-        "hygiene": 0.17,
-        "fun": 0.22,
-        "social": 0.20,
-        "comfort": 0.15,
-        "bladder": 0.26,
+        "hunger": 0.38,
+        "energy": 0.30,
+        "hygiene": 0.21,
+        "fun": 0.19,
+        "social": 0.18,
+        "comfort": 0.13,
+        "bladder": 0.33,
     }
     for key in needs.keys():
         var rate := float(rates.get(key, 0.16)) * _decay_multiplier(String(key))
@@ -708,8 +733,62 @@ func _priority_score(key: String) -> float:
         score += 18.0
     return score
 
+func _default_hobby() -> String:
+    match personality:
+        "Playful":
+            return "Toy Design"
+        "Independent":
+            return "Tinkering"
+        "Cozy":
+            return "Reading"
+        "Neat":
+            return "Reading"
+        "Foodie":
+            return "Creative Project"
+        _:
+            return "Creative Project"
+
+func _critical_need() -> String:
+    var thresholds := {
+        "hunger": 18.0,
+        "energy": 14.0,
+        "hygiene": 9.0,
+        "bladder": 12.0,
+    }
+    var worst := ""
+    var worst_ratio := 2.0
+    for key in thresholds.keys():
+        var value := float(needs.get(key, 100.0))
+        var ratio := value / float(thresholds[key])
+        if value <= float(thresholds[key]) and ratio < worst_ratio:
+            worst_ratio = ratio
+            worst = String(key)
+    return worst
+
+func _hobby_drive() -> float:
+    var drive := 0.24
+    if personality == "Playful":
+        drive += 0.18
+    elif personality == "Independent":
+        drive += 0.12
+    elif personality == "Cozy":
+        drive += 0.08
+    if habits.has("Toy Lover"):
+        drive += 0.16
+    if emotion in ["Inspired", "Focused", "Playful"]:
+        drive += 0.14
+    if project_progress > 0.0:
+        drive += 0.12
+    return clampf(drive, 0.12, 0.78)
+
 func _choose_next_goal() -> void:
     _plan_action_queue()
+
+    var critical := _critical_need()
+    if not critical.is_empty():
+        _seek_need(critical)
+        if not action_kind.is_empty() or not path.is_empty():
+            return
 
     if age_stage in ["young_adult", "adult"]:
         var baby: SlimeAgent = household.find_needy_baby(slime_id)
@@ -722,14 +801,19 @@ func _choose_next_goal() -> void:
             state_label.text = "Care"
             return
 
-    if personality == "Neat" or habits.has("Tidy Routine"):
-        var dirty: Dictionary = build_system.find_problem_object("dirty", current_cell())
-        if not dirty.is_empty() and rng.randf() < 0.75:
+    var dirty: Dictionary = build_system.find_problem_object("dirty", current_cell())
+    if not dirty.is_empty():
+        var clean_chance := 0.24
+        if personality == "Neat":
+            clean_chance += 0.46
+        if habits.has("Tidy Routine"):
+            clean_chance += 0.22
+        if rng.randf() < clean_chance:
             var dirty_item: Dictionary = dirty["item"]
             target_object_id = String(dirty_item.get("id", ""))
             target_slime_id = ""
             action_kind = "clean_object"
-            current_activity = "Cleaning"
+            current_activity = "Cleaning the house"
             _set_path_to(dirty["cell"])
             state_label.text = "Clean"
             return
@@ -755,13 +839,22 @@ func _choose_next_goal() -> void:
             best_score = score
             best_key = key_string
 
-    var proactive_threshold := 23.0
-    if habits.has("Slow Starter"):
-        proactive_threshold = 28.0
+    # Hobbies can beat non-critical chores/needs. A slime who is in the zone
+    # may make a slightly bad decision and keep working instead of optimizing.
+    if age_stage != "baby" and rng.randf() < _hobby_drive():
+        if _start_hobby():
+            return
 
+    var proactive_threshold := 20.0
+    if habits.has("Slow Starter"):
+        proactive_threshold = 25.0
     if best_score >= proactive_threshold:
         _seek_need(best_key)
         if not action_kind.is_empty() or not path.is_empty():
+            return
+
+    if age_stage != "baby" and rng.randf() < 0.45:
+        if _start_hobby():
             return
 
     if habits.has("Wanderer") or rng.randf() < 0.72:
@@ -776,31 +869,94 @@ func _seek_need(key: String) -> void:
         var other: SlimeAgent = household.find_nearest_other(slime_id, global_position)
         if other:
             target_slime_id = other.slime_id
+            target_object_id = ""
             action_kind = "social"
             current_activity = "Socializing"
             _set_path_to(other.current_cell())
             state_label.text = "Chat"
             return
-    var furniture_kind: String = String({
-        "hunger": "food",
-        "energy": "bed",
-        "hygiene": "bath",
-        "fun": "toy",
-        "comfort": "sofa",
-        "bladder": "toilet",
-    }.get(key, ""))
-    if furniture_kind.is_empty():
-        return
-    var target: Dictionary = build_system.find_furniture(furniture_kind, current_cell())
+
+    if key == "fun":
+        if _start_hobby():
+            return
+
+    var kinds: Array[String] = []
+    var action := ""
+    match key:
+        "hunger":
+            kinds = ["stove", "food", "fridge"]
+            action = "cook"
+        "energy":
+            kinds = ["bed"]
+            action = "sleep"
+        "hygiene":
+            kinds = ["bath", "sink"]
+            action = "bathe"
+        "comfort":
+            kinds = ["sofa", "bed"]
+            action = "relax"
+        "bladder":
+            kinds = ["toilet"]
+            action = "bathroom"
+        _:
+            return
+
+    var target: Dictionary = build_system.find_first_furniture(kinds, current_cell())
     if target.is_empty():
         return
-    action_kind = key
-    current_activity = _action_label(key)
+    var target_type := String(target.get("type", ""))
+    if key == "hunger" and target_type != "stove":
+        action = "eat"
+    elif key == "hygiene" and target_type == "sink":
+        action = "wash_up"
+
+    action_kind = action
+    action_phase = ""
+    current_activity = _action_label(action)
     target_slime_id = ""
     var target_item: Dictionary = target.get("item", {})
     target_object_id = String(target_item.get("id", ""))
     _set_path_to(target["cell"])
-    state_label.text = _action_label(key)
+    state_label.text = _action_label(action)
+
+func _start_hobby() -> bool:
+    var hobby := favorite_hobby
+    if hobby.is_empty() or not HOBBY_DATA.has(hobby):
+        hobby = _default_hobby()
+        favorite_hobby = hobby
+    var info: Dictionary = HOBBY_DATA.get(hobby, {})
+    var object_type := String(info.get("object", "toy"))
+    var target := build_system.find_furniture(object_type, current_cell())
+    if target.is_empty():
+        for fallback in ["workbench", "bookshelf", "desk", "toy"]:
+            target = build_system.find_furniture(fallback, current_cell())
+            if not target.is_empty():
+                for hobby_name in HOBBY_DATA.keys():
+                    var candidate: Dictionary = HOBBY_DATA[hobby_name]
+                    if String(candidate.get("object", "")) == fallback:
+                        hobby = String(hobby_name)
+                        break
+                break
+    if target.is_empty():
+        return false
+
+    favorite_hobby = hobby
+    if project_name.is_empty():
+        project_name = "%s Project" % hobby
+    var target_item: Dictionary = target.get("item", {})
+    target_object_id = String(target_item.get("id", ""))
+    target_slime_id = ""
+    action_kind = "hobby"
+    action_phase = ""
+    engrossed = rng.randf() < _hobby_drive()
+    engrossed_time = rng.randf_range(18.0, 36.0) if engrossed else rng.randf_range(8.0, 14.0)
+    current_activity = "Deep in %s" % hobby if engrossed else "Working on %s" % hobby
+    state_label.text = "In the zone" if engrossed else hobby
+    _set_path_to(target["cell"])
+    if engrossed:
+        var emotion_name := String((HOBBY_DATA[hobby] as Dictionary).get("emotion", "Focused"))
+        add_moodlet("In the Zone", emotion_name, 8.0, engrossed_time)
+    return true
 
 func _set_path_to(cell: Vector2i) -> void:
     path = build_system.path_between(current_cell(), cell)
@@ -836,10 +992,20 @@ func _move_along_path() -> void:
 
 func _perform_action(delta: float) -> void:
     action_timer += delta
+
+    if action_kind == "hobby":
+        engrossed_time = maxf(0.0, engrossed_time - delta)
+        var emergency := _critical_need()
+        if engrossed and not emergency.is_empty() and action_timer >= 3.0:
+            add_moodlet("Pulled Away From Project", "Uncomfortable", 5.0, 12.0)
+            _finish_current_action()
+            think_timer = 0.05
+            return
+
     if action_kind == "care_baby":
         var baby: SlimeAgent = household.get_slime(target_slime_id)
         if baby == null:
-            action_kind = ""
+            _finish_current_action()
             return
         if global_position.distance_to(baby.global_position) > 2.0:
             _set_path_to(baby.current_cell())
@@ -855,18 +1021,31 @@ func _perform_action(delta: float) -> void:
         baby.needs["social"] = clampf(float(baby.needs["social"]) + 5.0 * delta, 0.0, NEED_MAX)
         needs["social"] = clampf(float(needs["social"]) + 2.0 * delta, 0.0, NEED_MAX)
         gain_skill("parenting", 1.3 * delta)
-        if action_timer >= 4.0 or float(baby.needs[lowest_key]) >= 92.0:
+        if action_timer >= 5.0 or float(baby.needs[lowest_key]) >= 92.0:
             baby.add_moodlet("Cared For", "Happy", 7.0, 18.0)
             add_moodlet("Caring Moment", "Happy", 5.0, 18.0)
-    elif action_kind == "clean_object":
-        build_system.clean_object(target_object_id, 18.0 * delta)
+            _finish_current_action()
+        return
+
+    if action_kind == "clean_object":
+        build_system.clean_object(target_object_id, 14.0 * delta)
         gain_skill("cleaning", 1.0 * delta)
-        needs["hygiene"] = clampf(float(needs["hygiene"]) - 0.7 * delta, 0.0, NEED_MAX)
-    elif action_kind == "repair_object":
-        build_system.repair_object(target_object_id, 14.0 * delta)
+        needs["hygiene"] = clampf(float(needs["hygiene"]) - 0.45 * delta, 0.0, NEED_MAX)
+        if action_timer >= 6.0:
+            add_moodlet("Fresh Home", "Happy", 4.0, 14.0)
+            _finish_current_action()
+        return
+
+    if action_kind == "repair_object":
+        build_system.repair_object(target_object_id, 12.0 * delta)
         gain_skill("handiness", 1.2 * delta)
-    elif action_kind == "social":
-        var other: SlimeAgent = household.get_slime(target_slime_id)
+        if action_timer >= 7.0:
+            add_moodlet("Fixed It", "Focused", 5.0, 15.0)
+            _finish_current_action()
+        return
+
+    if action_kind == "social":
+        var other: SlimeAgent = household.get_any_slime(target_slime_id)
         if other:
             if global_position.distance_to(other.global_position) > 2.0:
                 _set_path_to(other.current_cell())
@@ -875,49 +1054,125 @@ func _perform_action(delta: float) -> void:
             face_delta.y = 0.0
             if face_delta.length() > 0.05:
                 rotation.y = lerp_angle(rotation.y, atan2(face_delta.x, face_delta.z) + PI, 0.15)
-            needs["social"] = clampf(float(needs["social"]) + 10.0 * delta, 0.0, NEED_MAX)
-            other.needs["social"] = clampf(float(other.needs["social"]) + 6.0 * delta, 0.0, NEED_MAX)
-            relationships[other.slime_id] = float(relationships.get(other.slime_id, 0.0)) + 1.2 * delta
-            other.relationships[slime_id] = float(other.relationships.get(slime_id, 0.0)) + 1.2 * delta
-            gain_skill("social", 1.8 * delta)
-            other.gain_skill("social", 1.0 * delta)
+            needs["social"] = clampf(float(needs["social"]) + 8.0 * delta, 0.0, NEED_MAX)
+            other.needs["social"] = clampf(float(other.needs["social"]) + 4.0 * delta, 0.0, NEED_MAX)
+            relationships[other.slime_id] = float(relationships.get(other.slime_id, 0.0)) + 1.0 * delta
+            other.relationships[slime_id] = float(other.relationships.get(slime_id, 0.0)) + 1.0 * delta
+            gain_skill("social", 1.4 * delta)
+            other.gain_skill("social", 0.8 * delta)
             _complete_want("social")
-            if float(relationships.get(other.slime_id, 0.0)) >= 35.0:
-                relationship_flags[other.slime_id] = "Friend"
-                other.relationship_flags[slime_id] = "Friend"
-    else:
-        var recovery := 13.0
-        if (action_kind == "fun" and habits.has("Toy Lover")) or (action_kind == "hygiene" and habits.has("Tidy Routine")):
-            recovery = 16.0
-        elif (action_kind == "hunger" and habits.has("Snacky")) or (action_kind == "energy" and habits.has("Napper")):
-            recovery = 15.0
-        elif action_kind == "comfort" and habits.has("Cozy Seeker"):
-            recovery = 15.0
-        needs[action_kind] = clampf(float(needs.get(action_kind, 0.0)) + recovery * delta, 0.0, NEED_MAX)
-        _gain_activity_skill(action_kind, delta)
-        _complete_want(_want_id_for_action(action_kind))
-        _try_secondary_social(delta)
-    var action_finished := action_timer >= 4.0
-    if action_kind in ["hunger", "energy", "hygiene", "fun", "social", "comfort", "bladder"]:
-        action_finished = action_finished or float(needs.get(action_kind, 0.0)) >= 96.0
-    if action_finished:
-        _record_habit_action(action_kind)
-        if action_kind == "hunger":
-            add_inventory_item("Prepared Meal", 1)
-            add_moodlet("Ate a Meal", "Happy", 3.0 + float(skill_level("cooking")) * 0.4, 12.0)
-        elif action_kind == "bladder":
-            add_moodlet("Relieved", "Happy", 3.0, 10.0)
-        elif action_kind == "energy" and not target_object_id.is_empty():
-            build_system.claim_object(target_object_id, slime_id)
-        action_timer = 0.0
-        action_kind = ""
-        target_slime_id = ""
-        target_object_id = ""
-        secondary_activity = ""
-        current_activity = "Thinking"
-        state_label.text = ""
-        think_timer = rng.randf_range(1.0, 2.0)
-        data_changed.emit()
+        if action_timer >= 7.0 or float(needs.get("social", 0.0)) >= 96.0:
+            _record_habit_action("social")
+            _finish_current_action()
+        return
+
+    match action_kind:
+        "cook":
+            gain_skill("cooking", 1.25 * delta)
+            build_system.soil_object(target_object_id, 0.9 * delta)
+            build_system.wear_object(target_object_id, 0.18 * delta)
+            if action_timer >= 6.0:
+                add_inventory_item("Fresh Meal", 1)
+                action_kind = "eat"
+                action_timer = 0.0
+                current_activity = "Eating homemade meal"
+                state_label.text = "Eat"
+                add_moodlet("Made a Meal", "Inspired", 3.0 + float(skill_level("cooking")) * 0.35, 12.0)
+            return
+        "eat":
+            needs["hunger"] = clampf(float(needs["hunger"]) + 10.5 * delta, 0.0, NEED_MAX)
+            needs["comfort"] = clampf(float(needs["comfort"]) + 1.0 * delta, 0.0, NEED_MAX)
+            build_system.soil_object(target_object_id, 0.35 * delta)
+            if action_timer >= 7.0 or float(needs["hunger"]) >= 96.0:
+                _complete_want("eat")
+                _record_habit_action("hunger")
+                add_moodlet("Well Fed", "Happy", 5.0, 18.0)
+                _finish_current_action()
+            return
+        "sleep":
+            needs["energy"] = clampf(float(needs["energy"]) + 6.5 * delta, 0.0, NEED_MAX)
+            needs["comfort"] = clampf(float(needs["comfort"]) + 1.2 * delta, 0.0, NEED_MAX)
+            build_system.wear_object(target_object_id, 0.06 * delta)
+            if float(needs["energy"]) >= 96.0 and action_timer >= 6.0:
+                build_system.claim_object(target_object_id, slime_id)
+                _complete_want("sleep")
+                _record_habit_action("energy")
+                add_moodlet("Well Rested", "Energized", 7.0, 22.0)
+                _finish_current_action()
+            return
+        "bathe":
+            needs["hygiene"] = clampf(float(needs["hygiene"]) + 8.5 * delta, 0.0, NEED_MAX)
+            needs["comfort"] = clampf(float(needs["comfort"]) + 0.8 * delta, 0.0, NEED_MAX)
+            build_system.soil_object(target_object_id, 0.28 * delta)
+            if float(needs["hygiene"]) >= 96.0 or action_timer >= 9.0:
+                _complete_want("wash")
+                _record_habit_action("hygiene")
+                add_moodlet("Fresh and Clean", "Happy", 5.0, 16.0)
+                _finish_current_action()
+            return
+        "wash_up":
+            needs["hygiene"] = clampf(float(needs["hygiene"]) + 5.0 * delta, 0.0, NEED_MAX)
+            build_system.soil_object(target_object_id, 0.18 * delta)
+            if float(needs["hygiene"]) >= 82.0 or action_timer >= 5.0:
+                _finish_current_action()
+            return
+        "bathroom":
+            needs["bladder"] = clampf(float(needs["bladder"]) + 18.0 * delta, 0.0, NEED_MAX)
+            needs["hygiene"] = clampf(float(needs["hygiene"]) - 0.16 * delta, 0.0, NEED_MAX)
+            build_system.soil_object(target_object_id, 0.42 * delta)
+            if float(needs["bladder"]) >= 96.0 or action_timer >= 5.0:
+                _complete_want("bathroom")
+                add_moodlet("Relieved", "Happy", 3.0, 10.0)
+                _finish_current_action()
+            return
+        "hobby":
+            var info: Dictionary = HOBBY_DATA.get(favorite_hobby, {})
+            var hobby_skill := String(info.get("skill", "creativity"))
+            gain_skill(hobby_skill, 1.15 * delta)
+            needs["fun"] = clampf(float(needs["fun"]) + 4.0 * delta, 0.0, NEED_MAX)
+            project_progress = minf(100.0, project_progress + (2.8 + float(skill_level(hobby_skill)) * 0.22) * delta)
+            build_system.wear_object(target_object_id, 0.09 * delta)
+            if project_progress >= 100.0:
+                add_inventory_item("Finished %s" % project_name, 1)
+                satisfaction += 55
+                add_moodlet("Finished a Project", String(info.get("emotion", "Focused")), 10.0, 24.0)
+                project_progress = 0.0
+                project_name = "%s Project" % favorite_hobby
+                _record_habit_action("fun")
+                _finish_current_action()
+                return
+            if not engrossed and action_timer >= 11.0:
+                _record_habit_action("fun")
+                _finish_current_action()
+            elif engrossed and engrossed_time <= 0.0:
+                add_moodlet("Lost Track of Time", "Focused", 5.0, 14.0)
+                _record_habit_action("fun")
+                _finish_current_action()
+            return
+        "relax":
+            needs["comfort"] = clampf(float(needs["comfort"]) + 7.0 * delta, 0.0, NEED_MAX)
+            needs["energy"] = clampf(float(needs["energy"]) + 1.4 * delta, 0.0, NEED_MAX)
+            if float(needs["comfort"]) >= 96.0 or action_timer >= 8.0:
+                _complete_want("cozy")
+                _record_habit_action("comfort")
+                _finish_current_action()
+            return
+        _:
+            _finish_current_action()
+
+func _finish_current_action() -> void:
+    action_timer = 0.0
+    action_kind = ""
+    action_phase = ""
+    target_slime_id = ""
+    target_object_id = ""
+    secondary_activity = ""
+    engrossed = false
+    engrossed_time = 0.0
+    current_activity = "Thinking"
+    state_label.text = ""
+    think_timer = rng.randf_range(0.7, 1.6)
+    data_changed.emit()
 
 func _tick_life_stage() -> void:
     if not SlimeLifeRules.AGE_DURATIONS.has(age_stage):
@@ -947,6 +1202,10 @@ func _tick_moodlets(delta: float) -> void:
         _ensure_moodlet("Exhausted", "Tired", 12.0, 8.0)
     if float(needs.get("social", 100.0)) < 18.0:
         _ensure_moodlet("Lonely", "Sad", 10.0, 8.0)
+    if float(needs.get("hygiene", 100.0)) < 18.0:
+        _ensure_moodlet("Grimy", "Uncomfortable", 9.0, 8.0)
+    if float(needs.get("bladder", 100.0)) < 16.0:
+        _ensure_moodlet("Desperate for Bathroom", "Uncomfortable", 12.0, 8.0)
     if float(needs.get("fun", 100.0)) > 86.0:
         _ensure_moodlet("Having Fun", "Playful", 6.0, 6.0)
 
@@ -1035,28 +1294,29 @@ func skill_level(skill: String) -> int:
 
 func _gain_activity_skill(kind: String, delta: float) -> void:
     match kind:
-        "hunger":
-            gain_skill("cooking", 0.8 * delta)
-        "bladder":
-            gain_skill("cleaning", 0.15 * delta)
-        "hygiene":
-            gain_skill("cleaning", 0.7 * delta)
-        "fun":
-            gain_skill("creativity", 0.8 * delta)
-        "comfort":
-            gain_skill("logic", 0.35 * delta)
+        "cook":
+            gain_skill("cooking", 1.2 * delta)
+        "bathe", "wash_up", "bathroom":
+            gain_skill("cleaning", 0.12 * delta)
+        "hobby":
+            var info: Dictionary = HOBBY_DATA.get(favorite_hobby, {})
+            gain_skill(String(info.get("skill", "creativity")), 0.8 * delta)
+        "relax":
+            gain_skill("logic", 0.20 * delta)
         "social":
             gain_skill("social", 0.8 * delta)
 
 func _want_id_for_action(kind: String) -> String:
     return {
-        "hunger": "eat",
-        "energy": "sleep",
-        "hygiene": "wash",
-        "fun": "play",
+        "cook": "eat",
+        "eat": "eat",
+        "sleep": "sleep",
+        "bathe": "wash",
+        "wash_up": "wash",
+        "hobby": "play",
         "social": "social",
-        "comfort": "cozy",
-        "bladder": "bathroom",
+        "relax": "cozy",
+        "bathroom": "bathroom",
     }.get(kind, "")
 
 func _complete_want(want_id: String) -> void:
@@ -1112,7 +1372,7 @@ func profile_detail_text() -> String:
     var want_text := "No current want"
     if not wants.is_empty():
         want_text = String(wants[0].get("text", ""))
-    return "%s • %s • %s %d • %s • %s" % [emotion, aspiration, best_skill.capitalize(), best_level, want_text, habit_summary()]
+    return "%s • %s • %s %d • %s • %s • %s %.0f%%" % [emotion, aspiration, best_skill.capitalize(), best_level, want_text, habit_summary(), favorite_hobby, project_progress]
 
 func activity_text() -> String:
     if not secondary_activity.is_empty():
@@ -1138,17 +1398,17 @@ func profile_text() -> String:
 func _record_habit_action(kind: String) -> void:
     var habit := ""
     match kind:
-        "hunger":
+        "hunger", "cook", "eat":
             habit = "Snacky"
-        "energy":
+        "energy", "sleep":
             habit = "Napper"
-        "hygiene", "clean_object":
+        "hygiene", "bathe", "wash_up", "clean_object":
             habit = "Tidy Routine"
-        "fun":
+        "fun", "hobby":
             habit = "Toy Lover"
         "social", "care_baby":
             habit = "Chatty"
-        "comfort":
+        "comfort", "relax":
             habit = "Cozy Seeker"
         "wander":
             habit = "Wanderer"
@@ -1177,13 +1437,21 @@ func habit_summary() -> String:
 
 func _action_label(key: String) -> String:
     return {
-        "hunger": "Eat",
-        "energy": "Rest",
-        "hygiene": "Wash",
-        "fun": "Play",
-        "social": "Chat",
-        "comfort": "Cozy",
+        "hunger": "Cook / Eat",
+        "energy": "Sleep",
+        "hygiene": "Bathe",
+        "fun": "Hobby",
+        "social": "Socialize",
+        "comfort": "Relax",
         "bladder": "Bathroom",
+        "cook": "Cooking",
+        "eat": "Eating",
+        "sleep": "Sleeping",
+        "bathe": "Bathing",
+        "wash_up": "Washing Up",
+        "hobby": "Hobby Project",
+        "bathroom": "Bathroom",
+        "relax": "Relaxing",
         "care_baby": "Care",
         "clean_object": "Clean",
         "repair_object": "Repair",
