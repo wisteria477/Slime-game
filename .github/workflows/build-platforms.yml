@@ -126,9 +126,10 @@ jobs:
         run: |
           mkdir -p "$HOME/.config/godot"
           cat > /tmp/android_setup.gd <<'GDSCRIPT'
+          @tool
           extends SceneTree
           func _initialize():
-              var settings := EditorSettings.get_singleton()
+              var settings: EditorSettings = EditorInterface.get_editor_settings()
               settings.set_setting("export/android/android_sdk_path", OS.get_environment("ANDROID_HOME"))
               settings.set_setting("export/android/java_sdk_path", OS.get_environment("JAVA_HOME"))
               settings.save()
