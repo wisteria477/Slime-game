@@ -470,6 +470,8 @@ func social_interact(a_id: String, b_id: String, interaction: String) -> bool:
     var b := get_any_slime(b_id)
     if a == null or b == null or a == b:
         return false
+    var old_label := relationship_label(a, b)
+    var old_flag := String(a.relationship_flags.get(b.slime_id, ""))
     var friendship_delta := 0.0
     var romance_delta := 0.0
     match interaction:
@@ -521,8 +523,16 @@ func social_interact(a_id: String, b_id: String, interaction: String) -> bool:
         "interaction": interaction,
         "label": relationship_label(a, b),
     })
-    if relationship_label(a, b) in ["Friend", "Best Friend"]:
+    var new_label := relationship_label(a, b)
+    var new_flag := String(a.relationship_flags.get(b.slime_id, ""))
+    if new_label in ["Friend", "Best Friend"]:
         _unlock_achievement("first_friend")
+    if new_label != old_label:
+        notification.emit("%s and %s are now %s" % [a.display_name, b.display_name, new_label])
+    elif new_flag != old_flag and not new_flag.is_empty():
+        notification.emit("%s and %s: %s" % [a.display_name, b.display_name, new_flag])
+    elif interaction in ["Kiss", "Propose", "Argue", "Apologize"]:
+        notification.emit("%s • %s • %s" % [a.display_name, interaction, b.display_name])
     household_changed.emit()
     return true
 
