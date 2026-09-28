@@ -25,6 +25,7 @@ var event_score := 0.0
 var mortality_enabled := false
 var inactive_households: Array[Dictionary] = []
 var last_schedule_key := ""
+var lod_frame := 0
 var rng := RandomNumberGenerator.new()
 
 func setup(root: Node3D, build_ref: SlimeBuildSystem) -> void:
@@ -125,10 +126,25 @@ func add_baby(parent_a_id: String, parent_b_id: String, baby_name: String) -> Sl
     return baby
 
 func tick(delta: float) -> void:
-    for slime in slimes:
-        slime.tick_sim(delta)
-    for npc in npcs:
-        npc.tick_sim(delta)
+    lod_frame = (lod_frame + 1) % 120
+    var total_agents := slimes.size() + npcs.size()
+    if total_agents <= 10:
+        for slime in slimes:
+            slime.tick_sim(delta)
+        for npc in npcs:
+            npc.tick_sim(delta)
+    else:
+        var stride := clampi(int(ceil(float(total_agents) / 8.0)), 2, 6)
+        var selected := selected_slime()
+        for i in range(slimes.size()):
+            var slime := slimes[i]
+            if slime == selected:
+                slime.tick_sim(delta)
+            elif (i + lod_frame) % stride == 0:
+                slime.tick_sim(delta * float(stride))
+        for i in range(npcs.size()):
+            if (i + slimes.size() + lod_frame) % stride == 0:
+                npcs[i].tick_sim(delta * float(stride))
     _tick_mortality_and_neglect(delta)
     if event_timer > 0.0:
         event_timer = maxf(0.0, event_timer - delta)
