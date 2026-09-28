@@ -540,6 +540,7 @@ func _build_life_panel() -> void:
     controls.add_child(social_action)
 
     controls.add_child(_button("DO SOCIAL", _do_social, Vector2(240, 54)))
+    controls.add_child(_button("PUDDLE PARTY", _start_party, Vector2(240, 54)))
     controls.add_child(_button("CLOSE", _close_life_panel, Vector2(240, 54)))
 
 func _open_life_panel() -> void:
@@ -557,7 +558,7 @@ func _populate_social_targets() -> void:
     var selected := household.selected_slime()
     if selected == null:
         return
-    for slime in household.slimes:
+    for slime in household.all_present_slimes():
         if slime == selected:
             continue
         social_target.add_item(slime.display_name)
@@ -583,7 +584,7 @@ func _refresh_life_panel() -> void:
     for mood in slime.moodlets:
         mood_parts.append("• %s (%s)" % [String(mood.get("text", "")), String(mood.get("emotion", ""))])
     var relation_parts: Array[String] = []
-    for other in household.slimes:
+    for other in household.all_present_slimes():
         if other == slime:
             continue
         relation_parts.append("• %s — %s (%d)" % [
@@ -615,6 +616,12 @@ func _refresh_life_panel() -> void:
         household.current_lot,
         household.achievements.size(),
     ]
+    if not household.event_name.is_empty():
+        life_text.text += "\n\n[b]Event[/b]  %s · %ds left · score %d" % [
+            household.event_name,
+            int(household.event_timer),
+            int(household.event_score),
+        ]
 
 func _cycle_career() -> void:
     var slime := household.selected_slime()
@@ -675,6 +682,11 @@ func _travel_next() -> void:
                 build_system.make_starter_home()
         household.lot_builds[next_lot] = build_system.serialize()
 
+    if next_lot == "Home":
+        household.clear_npcs()
+    else:
+        household.spawn_npcs(3)
+
     for i in range(household.slimes.size()):
         var slime := household.slimes[i]
         var spawn := build_system.find_spawn_cell(Vector2i(4 + (i % 3), 5))
@@ -693,10 +705,17 @@ func _do_social() -> void:
     var target_id := String(social_target.get_item_metadata(social_target.selected))
     var interaction := social_action.get_item_text(maxi(social_action.selected, 0))
     if household.social_interact(selected.slime_id, target_id, interaction):
-        var target := household.get_slime(target_id)
+        var target := household.get_any_slime(target_id)
         _status("%s: %s with %s" % [selected.display_name, interaction, target.display_name if target else "slime"])
     _refresh_life_panel()
     save_game(false)
+
+func _start_party() -> void:
+    if household.start_event("Puddle Party", 90.0):
+        _status("Puddle Party started")
+    else:
+        _status("An event is already running")
+    _refresh_life_panel()
 
 func _build_creator_dialog() -> void:
     creator_overlay = ColorRect.new()
