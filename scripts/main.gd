@@ -1612,16 +1612,16 @@ func _toggle_build() -> void:
     _status("Build mode" if build_mode else "Live mode")
 
 func _build_tools_for_category() -> Array[String]:
-    var all_tools: Array[String] = ["floor", "wall", "door", "window", "stairs", "platform", "roof", "erase", "bed", "food", "bath", "sofa", "toilet", "sink", "stove", "fridge", "table", "toy", "bookshelf", "desk", "workbench", "lamp", "plant", "rug", "dresser"]
+    var all_tools: Array[String] = ["floor", "wall", "door", "window", "stairs", "platform", "roof", "erase", "bed", "food", "bath", "shower", "sofa", "chair", "toilet", "sink", "stove", "fridge", "counter", "table", "toy", "bookshelf", "desk", "workbench", "lamp", "plant", "rug", "dresser", "mirror", "wall_art"]
     match build_category:
         "Structure":
             return ["floor", "wall", "door", "window", "stairs", "platform", "roof", "erase"]
         "Needs":
-            return ["bed", "food", "bath", "sofa", "toilet", "sink", "stove", "fridge", "table"]
+            return ["bed", "food", "bath", "shower", "sofa", "chair", "toilet", "sink", "stove", "fridge", "counter", "table"]
         "Hobbies":
             return ["toy", "bookshelf", "desk", "workbench"]
         "Decor":
-            return ["lamp", "plant", "rug", "dresser"]
+            return ["lamp", "plant", "rug", "dresser", "mirror", "wall_art"]
         _:
             return all_tools
 
