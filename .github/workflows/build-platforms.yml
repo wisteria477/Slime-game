@@ -1,0 +1,149 @@
+name: Build desktop and Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "project.godot"
+      - "export_presets.cfg"
+      - "scenes/**"
+      - "scripts/**"
+      - "assets/**"
+      - ".github/workflows/build-platforms.yml"
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: 4.7.2-stable
+  GODOT_TEMPLATE_DIR: 4.7.2.stable
+
+jobs:
+  desktop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"             -o godot.zip
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" godot
+          chmod +x godot
+      - name: Install export templates
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"             -o templates.tpz
+          mkdir -p /tmp/templates
+          unzip -q templates.tpz -d /tmp/templates
+          target="$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          mkdir -p "$target"
+          cp -R /tmp/templates/templates/. "$target/"
+      - name: Import project
+        run: ./godot --headless --editor --path . --quit
+      - name: Export Linux and Windows
+        run: |
+          mkdir -p build/linux build/windows
+          ./godot --headless --path . --export-release "Linux" "build/linux/SlimeLife.x86_64"
+          chmod +x build/linux/SlimeLife.x86_64
+          ./godot --headless --path . --export-release "Windows Desktop" "build/windows/SlimeLife.exe"
+          test -s build/linux/SlimeLife.x86_64
+          test -s build/windows/SlimeLife.exe
+      - name: Upload Linux
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlimeLife-Linux
+          path: build/linux/SlimeLife.x86_64
+          retention-days: 7
+      - name: Upload Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlimeLife-Windows
+          path: build/windows/SlimeLife.exe
+          retention-days: 7
+
+  macos:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Godot
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_macos.universal.zip"             -o godot.zip
+          unzip -q godot.zip -d godot
+      - name: Install export templates
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"             -o templates.tpz
+          mkdir -p /tmp/templates
+          unzip -q templates.tpz -d /tmp/templates
+          target="$HOME/Library/Application Support/Godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          mkdir -p "$target"
+          cp -R /tmp/templates/templates/. "$target/"
+      - name: Export macOS
+        run: |
+          GODOT="godot/Godot.app/Contents/MacOS/Godot"
+          "$GODOT" --headless --editor --path . --quit
+          mkdir -p build/macos
+          "$GODOT" --headless --path . --export-release "macOS" "build/macos/SlimeLife.zip"
+          test -s build/macos/SlimeLife.zip
+      - name: Upload macOS
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlimeLife-macOS-unsigned
+          path: build/macos/SlimeLife.zip
+          retention-days: 7
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Download Godot
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"             -o godot.zip
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" godot
+          chmod +x godot
+      - name: Install export templates
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"             -o templates.tpz
+          mkdir -p /tmp/templates
+          unzip -q templates.tpz -d /tmp/templates
+          target="$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          mkdir -p "$target"
+          cp -R /tmp/templates/templates/. "$target/"
+      - name: Prepare Android debug keystore
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v               -keystore "$HOME/.android/debug.keystore"               -storepass android -alias androiddebugkey -keypass android               -dname "CN=Android Debug,O=Android,C=US"               -keyalg RSA -keysize 2048 -validity 10000
+          fi
+      - name: Configure Godot Android paths
+        run: |
+          mkdir -p "$HOME/.config/godot"
+          cat > /tmp/android_setup.gd <<'GDSCRIPT'
+          extends SceneTree
+          func _initialize():
+              var settings := EditorSettings.get_singleton()
+              settings.set_setting("export/android/android_sdk_path", OS.get_environment("ANDROID_HOME"))
+              settings.set_setting("export/android/java_sdk_path", OS.get_environment("JAVA_HOME"))
+              settings.save()
+              quit()
+          GDSCRIPT
+          ./godot --headless --editor --path . --script /tmp/android_setup.gd
+      - name: Export Android APK
+        run: |
+          ./godot --headless --editor --path . --quit
+          mkdir -p build/android
+          ./godot --headless --path . --export-debug "Android" "build/android/SlimeLife.apk"
+          test -s build/android/SlimeLife.apk
+      - name: Upload Android
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlimeLife-Android
+          path: build/android/SlimeLife.apk
+          retention-days: 7
