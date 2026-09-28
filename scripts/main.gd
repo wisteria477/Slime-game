@@ -311,7 +311,7 @@ func _build_ui() -> void:
     day_button.position = Vector2(18, 18)
     day_button.add_theme_stylebox_override("normal", _panel_style(Color(0.62, 0.80, 0.82, 0.96), 28))
     day_button.add_theme_stylebox_override("hover", _panel_style(Color(0.72, 0.88, 0.88, 0.98), 28))
-    day_button.add_theme_font_color_override("font_color", Color("193239"))
+    day_button.add_theme_color_override("font_color", Color("193239"))
     root_ui.add_child(day_button)
 
     family_panel = PanelContainer.new()
