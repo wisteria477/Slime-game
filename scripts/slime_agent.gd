@@ -67,6 +67,7 @@ var career_xp := 0.0
 var school_grade := 70.0
 var inventory: Array[Dictionary] = []
 var action_queue: Array[String] = []
+var player_queue: Array[Dictionary] = []
 var secondary_activity := ""
 var current_activity := "Idle"
 var reward_traits: Array[String] = []
@@ -147,18 +148,102 @@ func tick_sim(delta: float) -> void:
     if not action_kind.is_empty() and path.is_empty():
         _perform_action(delta)
         return
+    if action_kind.is_empty() and path.is_empty() and not player_queue.is_empty():
+        _start_next_player_action()
+        return
     think_timer -= delta
     if think_timer <= 0.0 and path.is_empty():
         think_timer = rng.randf_range(1.0, 2.0)
         _choose_next_goal()
 
 func command_move(cell: Vector2i) -> void:
-    action_kind = ""
-    target_slime_id = ""
-    current_activity = "Player directed"
+    cancel_current_action(false)
+    player_queue.clear()
+    current_activity = "Going there"
     action_queue.clear()
-    state_label.text = ""
+    state_label.text = "Go"
     _set_path_to(cell)
+
+func queue_interaction(action: String, object_id: String, target_cell: Vector2i, target_slime := "") -> void:
+    player_queue.append({
+        "action": action,
+        "object_id": object_id,
+        "cell": [target_cell.x, target_cell.y],
+        "target_slime": target_slime,
+    })
+    if action_kind.is_empty() and path.is_empty():
+        _start_next_player_action()
+
+func _start_next_player_action() -> void:
+    if player_queue.is_empty():
+        return
+    var entry: Dictionary = player_queue.pop_front()
+    var raw_cell: Array = entry.get("cell", [current_cell().x, current_cell().y])
+    action_kind = String(entry.get("action", ""))
+    target_object_id = String(entry.get("object_id", ""))
+    target_slime_id = String(entry.get("target_slime", ""))
+    action_timer = 0.0
+    action_phase = "player"
+    current_activity = _action_label(action_kind)
+    state_label.text = current_activity
+    _set_path_to(Vector2i(int(raw_cell[0]), int(raw_cell[1])))
+
+func cancel_current_action(clear_queue := false) -> void:
+    action_kind = ""
+    target_object_id = ""
+    target_slime_id = ""
+    action_timer = 0.0
+    action_phase = ""
+    path.clear()
+    path_index = 0
+    velocity = Vector3.ZERO
+    engrossed = false
+    engrossed_time = 0.0
+    current_activity = "Thinking"
+    state_label.text = ""
+    if clear_queue:
+        player_queue.clear()
+    think_timer = 0.15
+
+func remove_queued_action(index: int) -> void:
+    if index >= 0 and index < player_queue.size():
+        player_queue.remove_at(index)
+
+func player_queue_text() -> Array[String]:
+    var result: Array[String] = []
+    if not action_kind.is_empty():
+        result.append(_action_label(action_kind))
+    for entry in player_queue:
+        result.append(_action_label(String(entry.get("action", ""))))
+    return result
+
+func action_progress() -> float:
+    if action_kind.is_empty():
+        return 0.0
+    match action_kind:
+        "cook":
+            return clampf(action_timer / 6.0, 0.0, 1.0)
+        "eat":
+            return clampf(action_timer / 7.0, 0.0, 1.0)
+        "sleep":
+            return clampf(float(needs.get("energy", 0.0)) / 100.0, 0.0, 1.0)
+        "bathe":
+            return clampf(float(needs.get("hygiene", 0.0)) / 100.0, 0.0, 1.0)
+        "bathroom":
+            return clampf(float(needs.get("bladder", 0.0)) / 100.0, 0.0, 1.0)
+        "hobby":
+            return clampf(project_progress / 100.0, 0.0, 1.0)
+        "clean_object":
+            return clampf(action_timer / 6.0, 0.0, 1.0)
+        "repair_object":
+            return clampf(action_timer / 7.0, 0.0, 1.0)
+        "social":
+            return clampf(action_timer / 7.0, 0.0, 1.0)
+        "relax":
+            return clampf(float(needs.get("comfort", 0.0)) / 100.0, 0.0, 1.0)
+        _:
+            return clampf(action_timer / 6.0, 0.0, 1.0)
+
 
 func set_selected(selected: bool) -> void:
     if selection_disc:
@@ -200,6 +285,7 @@ func serialize() -> Dictionary:
         "inventory": inventory.duplicate(true),
         "reward_traits": reward_traits.duplicate(),
         "routine_memory": routine_memory.duplicate(true),
+        "player_queue": player_queue.duplicate(true),
         "life_state": life_state,
         "danger_timer": danger_timer,
         "favorite_hobby": favorite_hobby,
@@ -246,6 +332,7 @@ func restore(data: Dictionary) -> void:
     for reward in data.get("reward_traits", []):
         reward_traits.append(String(reward))
     routine_memory = data.get("routine_memory", {}).duplicate(true)
+    player_queue = data.get("player_queue", []).duplicate(true)
     life_state = String(data.get("life_state", "living"))
     danger_timer = float(data.get("danger_timer", 0.0))
     favorite_hobby = String(data.get("favorite_hobby", _default_hobby()))
@@ -1173,6 +1260,8 @@ func _finish_current_action() -> void:
     state_label.text = ""
     think_timer = rng.randf_range(0.7, 1.6)
     data_changed.emit()
+    if not player_queue.is_empty():
+        _start_next_player_action()
 
 func _tick_life_stage() -> void:
     if not SlimeLifeRules.AGE_DURATIONS.has(age_stage):
@@ -1264,6 +1353,9 @@ func _plan_action_queue() -> void:
         action_queue.append(_action_label(String(entry["key"])))
 
 func queue_text() -> String:
+    var manual := player_queue_text()
+    if not manual.is_empty():
+        return " → ".join(manual)
     if action_queue.is_empty():
         return current_activity
     return " → ".join(action_queue)
