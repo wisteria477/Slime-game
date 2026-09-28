@@ -284,11 +284,15 @@ func _apply_responsive_layout() -> void:
     needs_panel.offset_bottom = -26
     needs_title.add_theme_font_size_override("font_size", 26 if portrait else 22)
 
-    build_button.custom_minimum_size = Vector2(138, 68)
-    build_button.offset_left = -160
+    build_button.custom_minimum_size = Vector2(154, 72)
+    build_button.offset_left = -176
     build_button.offset_right = -22
-    build_button.offset_top = -94
-    build_button.offset_bottom = -26
+    if portrait:
+        build_button.offset_top = -230
+        build_button.offset_bottom = -158
+    else:
+        build_button.offset_top = -94
+        build_button.offset_bottom = -22
 
     build_tray.offset_left = 24
     build_tray.offset_right = -24
@@ -430,15 +434,17 @@ func _build_baby_dialog() -> void:
     baby_dialog.confirmed.connect(_confirm_baby)
 
 func _show_start_screen() -> void:
+    if root_ui:
+        root_ui.visible = false
     start_overlay = ColorRect.new()
-    start_overlay.color = Color(0.04, 0.09, 0.11, 0.96)
+    start_overlay.color = Color(0.04, 0.09, 0.11, 1.0)
     start_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
     start_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
     ui_layer.add_child(start_overlay)
     var card := PanelContainer.new()
     card.set_anchors_preset(Control.PRESET_CENTER)
-    card.position = Vector2(-220, -150)
-    card.custom_minimum_size = Vector2(440, 300)
+    card.position = Vector2(-320, -230)
+    card.custom_minimum_size = Vector2(640, 460)
     card.add_theme_stylebox_override("panel", _panel_style(Color(0.84, 0.96, 0.98, 0.98), 34))
     start_overlay.add_child(card)
     var box := VBoxContainer.new()
@@ -447,15 +453,16 @@ func _show_start_screen() -> void:
     card.add_child(box)
     var title := _label("SLIME LIFE")
     title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    title.add_theme_font_size_override("font_size", 36)
+    title.add_theme_font_size_override("font_size", 52)
     box.add_child(title)
     var subtitle := _label("One home. One family. They keep living forever.")
     subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    subtitle.add_theme_font_size_override("font_size", 22)
     subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     box.add_child(subtitle)
-    box.add_child(_button("START HOUSE", _new_game, Vector2(220, 58)))
+    box.add_child(_button("START HOUSE", _new_game, Vector2(340, 76)))
     if FileAccess.file_exists(SAVE_PATH):
-        box.add_child(_button("CONTINUE", _continue_game, Vector2(220, 58)))
+        box.add_child(_button("CONTINUE", _continue_game, Vector2(340, 76)))
 
 func _new_game() -> void:
     build_system.make_starter_home()
@@ -478,6 +485,8 @@ func _continue_game() -> void:
 func _close_start_overlay() -> void:
     if is_instance_valid(start_overlay):
         start_overlay.queue_free()
+    if root_ui:
+        root_ui.visible = true
 
 func _open_creator() -> void:
     creator_name.text = ""
@@ -529,6 +538,7 @@ func _toggle_build() -> void:
     build_tray.visible = build_mode
     needs_panel.visible = not build_mode and household.selected_slime() != null
     build_button.visible = not build_mode
+    build_system.set_cutaway_visible(not build_mode)
     for slime in household.slimes:
         slime.sim_enabled = not build_mode
     _status("Build mode" if build_mode else "Live mode")
