@@ -32,6 +32,14 @@ var baby_button: Button
 var build_tray: PanelContainer
 var build_row: HBoxContainer
 var status_label: Label
+var money_label: Label
+var life_button: Button
+var life_overlay: ColorRect
+var life_panel: PanelContainer
+var life_text: RichTextLabel
+var career_cycle_button: Button
+var social_target: OptionButton
+var social_action: OptionButton
 var creator_overlay: ColorRect
 var creator_panel: PanelContainer
 var creator_name: LineEdit
@@ -79,6 +87,7 @@ func _ready() -> void:
     camera_rig.name = "CameraRig"
     add_child(camera_rig)
     _build_ui()
+    _build_life_panel()
     _build_creator_dialog()
     _build_baby_dialog()
     _apply_platform_profile()
@@ -98,12 +107,16 @@ func _process(delta: float) -> void:
         while world_minutes >= 24.0 * 60.0:
             world_minutes -= 24.0 * 60.0
             world_day += 1
+        var clock_total := int(world_minutes)
+        household.tick_world(world_day, (clock_total / 60) % 24, clock_total % 60, sim_delta)
         autosave_timer += delta
         if autosave_timer >= 12.0:
             autosave_timer = 0.0
             save_game(false)
     _refresh_clock()
     _refresh_needs_values()
+    _refresh_money()
+    _refresh_life_panel()
 
 func _notification(what: int) -> void:
     if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
@@ -203,9 +216,15 @@ func _world_tap(screen_pos: Vector2) -> void:
         var world = camera_rig.screen_to_ground(screen_pos)
         if world != null:
             var cell := build_system.world_to_cell(world)
+            var price := build_system.tool_cost(selected_tool)
+            if price > 0 and not household.spend(price):
+                _status("Not enough puddle coins — need %d" % price)
+                return
             if build_system.place(cell, selected_tool, wall_orientation):
-                _status("Placed %s" % selected_tool)
+                _status("Placed %s · -%d" % [selected_tool, price])
                 save_game(false)
+            elif price > 0:
+                household.earn(price)
         return
     if _select_slime_from_screen(screen_pos):
         return
@@ -297,12 +316,19 @@ func _apply_responsive_layout() -> void:
     build_button.custom_minimum_size = Vector2(154, 72)
     build_button.offset_left = -176
     build_button.offset_right = -22
+    life_button.custom_minimum_size = Vector2(154, 72)
+    life_button.offset_left = 22
+    life_button.offset_right = 176
     if portrait:
         build_button.offset_top = -230
         build_button.offset_bottom = -158
+        life_button.offset_top = -230
+        life_button.offset_bottom = -158
     else:
         build_button.offset_top = -94
         build_button.offset_bottom = -22
+        life_button.offset_top = -94
+        life_button.offset_bottom = -22
 
     build_tray.offset_left = 24
     build_tray.offset_right = -24
@@ -337,9 +363,31 @@ func _build_ui() -> void:
     family_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.40, 0.66, 0.68, 0.96), 32))
     family_panel.mouse_filter = Control.MOUSE_FILTER_STOP
     root_ui.add_child(family_panel)
+
+    money_label = Label.new()
+    money_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+    money_label.offset_left = -180
+    money_label.offset_right = 180
+    money_label.offset_top = 28
+    money_label.offset_bottom = 68
+    money_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    money_label.add_theme_font_size_override("font_size", 20)
+    money_label.add_theme_color_override("font_color", Color("173039"))
+    money_label.add_theme_color_override("font_outline_color", Color(0.92, 0.98, 0.98, 0.85))
+    money_label.add_theme_constant_override("outline_size", 5)
+    money_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    root_ui.add_child(money_label)
     family_row = HBoxContainer.new()
     family_row.add_theme_constant_override("separation", 6)
     family_panel.add_child(family_row)
+
+    life_button = _button("LIFE", _open_life_panel, Vector2(104, 54))
+    life_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+    life_button.offset_left = 18
+    life_button.offset_right = 122
+    life_button.offset_top = -72
+    life_button.offset_bottom = -18
+    root_ui.add_child(life_button)
 
     build_button = _button("BUILD", _toggle_build, Vector2(104, 54))
     build_button.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
@@ -408,6 +456,206 @@ func _build_ui() -> void:
     root_ui.add_child(status_label)
     _refresh_family()
     _refresh_needs_panel()
+
+func _build_life_panel() -> void:
+    life_overlay = ColorRect.new()
+    life_overlay.name = "LifeOverlay"
+    life_overlay.color = Color(0.03, 0.08, 0.10, 0.78)
+    life_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    life_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+    life_overlay.visible = false
+    ui_layer.add_child(life_overlay)
+
+    life_panel = PanelContainer.new()
+    life_panel.set_anchors_preset(Control.PRESET_CENTER)
+    life_panel.position = Vector2(-360, -310)
+    life_panel.custom_minimum_size = Vector2(720, 620)
+    life_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.80, 0.93, 0.92, 0.995), 32))
+    life_overlay.add_child(life_panel)
+
+    var box := VBoxContainer.new()
+    box.add_theme_constant_override("separation", 8)
+    life_panel.add_child(box)
+
+    var header := HBoxContainer.new()
+    box.add_child(header)
+    var title := _label("SLIME LIFE")
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    title.add_theme_font_size_override("font_size", 30)
+    header.add_child(title)
+    header.add_child(_button("✕", _close_life_panel, Vector2(58, 50)))
+
+    life_text = RichTextLabel.new()
+    life_text.bbcode_enabled = true
+    life_text.fit_content = false
+    life_text.scroll_active = true
+    life_text.custom_minimum_size = Vector2(0, 350)
+    life_text.size_flags_vertical = Control.SIZE_EXPAND_FILL
+    life_text.add_theme_font_size_override("normal_font_size", 17)
+    life_text.add_theme_color_override("default_color", Color("173039"))
+    box.add_child(life_text)
+
+    var controls := GridContainer.new()
+    controls.columns = 2
+    controls.add_theme_constant_override("h_separation", 10)
+    controls.add_theme_constant_override("v_separation", 8)
+    box.add_child(controls)
+
+    career_cycle_button = _button("CHANGE CAREER", _cycle_career, Vector2(240, 54))
+    controls.add_child(career_cycle_button)
+    controls.add_child(_button("PAY BILLS", _pay_bills, Vector2(240, 54)))
+    controls.add_child(_button("BUY FAST LEARNER", _buy_fast_learner, Vector2(240, 54)))
+    controls.add_child(_button("TRAVEL", _travel_next, Vector2(240, 54)))
+
+    social_target = OptionButton.new()
+    social_target.custom_minimum_size = Vector2(240, 52)
+    _style_option(social_target)
+    controls.add_child(social_target)
+
+    social_action = OptionButton.new()
+    social_action.custom_minimum_size = Vector2(240, 52)
+    _style_option(social_action)
+    for interaction in SlimeLifeRules.SOCIALS:
+        social_action.add_item(interaction)
+    controls.add_child(social_action)
+
+    controls.add_child(_button("DO SOCIAL", _do_social, Vector2(240, 54)))
+    controls.add_child(_button("CLOSE", _close_life_panel, Vector2(240, 54)))
+
+func _open_life_panel() -> void:
+    _populate_social_targets()
+    life_overlay.visible = true
+    _refresh_life_panel()
+
+func _close_life_panel() -> void:
+    life_overlay.visible = false
+
+func _populate_social_targets() -> void:
+    if social_target == null:
+        return
+    social_target.clear()
+    var selected := household.selected_slime()
+    if selected == null:
+        return
+    for slime in household.slimes:
+        if slime == selected:
+            continue
+        social_target.add_item(slime.display_name)
+        social_target.set_item_metadata(social_target.item_count - 1, slime.slime_id)
+
+func _refresh_life_panel() -> void:
+    if life_text == null or not life_overlay.visible:
+        return
+    var slime := household.selected_slime()
+    if slime == null:
+        life_text.text = "No slime selected."
+        return
+    var skill_parts: Array[String] = []
+    for skill in SlimeLifeRules.SKILLS:
+        skill_parts.append("%s %d" % [skill.capitalize(), slime.skill_level(skill)])
+    var want_parts: Array[String] = []
+    for want in slime.wants:
+        want_parts.append("• " + String(want.get("text", "")))
+    var fear_parts: Array[String] = []
+    for fear in slime.fears:
+        fear_parts.append("• " + String(fear.get("text", "")))
+    var mood_parts: Array[String] = []
+    for mood in slime.moodlets:
+        mood_parts.append("• %s (%s)" % [String(mood.get("text", "")), String(mood.get("emotion", ""))])
+    var relation_parts: Array[String] = []
+    for other in household.slimes:
+        if other == slime:
+            continue
+        relation_parts.append("• %s — %s (%d)" % [
+            other.display_name,
+            household.relationship_label(slime, other),
+            int(slime.relationships.get(other.slime_id, 0.0))
+        ])
+    if relation_parts.is_empty():
+        relation_parts.append("• No relationships yet")
+    life_text.text = "[b]%s[/b] · %s · [b]%s[/b]\n%s\n\n[b]Emotion[/b]  %s\n[b]Doing[/b]  %s\n[b]Queue[/b]  %s\n\n[b]Aspiration[/b]  %s\n[b]Wants[/b]\n%s\n[b]Fears[/b]\n%s\n\n[b]Career[/b]  %s\n[b]Satisfaction[/b]  %d\n[b]Skills[/b]  %s\n\n[b]Relationships[/b]\n%s\n\n[b]Household[/b]  %d puddle coins · Bills %d · Home value %d · Rooms %d · Lot %s\n[b]Achievements[/b]  %d" % [
+        slime.display_name,
+        slime.age_stage.capitalize(),
+        slime.profile_text(),
+        slime.profile_detail_text(),
+        slime.emotion,
+        slime.activity_text(),
+        slime.queue_text(),
+        slime.aspiration,
+        "\n".join(want_parts),
+        "\n".join(fear_parts),
+        slime.career_text(),
+        slime.satisfaction,
+        " · ".join(skill_parts),
+        "\n".join(relation_parts),
+        household.funds,
+        household.bills_due,
+        build_system.home_value(),
+        build_system.room_count(),
+        household.current_lot,
+        household.achievements.size(),
+    ]
+
+func _cycle_career() -> void:
+    var slime := household.selected_slime()
+    if slime == null:
+        return
+    var careers: Array = SlimeLifeRules.CAREERS.keys()
+    var index := careers.find(slime.career)
+    index = (index + 1) % careers.size()
+    household.assign_career(slime.slime_id, String(careers[index]))
+    _status("%s became a %s" % [slime.display_name, slime.career])
+    _refresh_life_panel()
+    save_game(false)
+
+func _pay_bills() -> void:
+    if household.pay_bills():
+        _status("Bills paid")
+    else:
+        _status("Not enough puddle coins")
+    _refresh_life_panel()
+    save_game(false)
+
+func _buy_fast_learner() -> void:
+    var slime := household.selected_slime()
+    if slime == null:
+        return
+    if slime.reward_traits.has("Fast Learner"):
+        _status("Already owns Fast Learner")
+        return
+    var cost := int((SlimeLifeRules.REWARDS["Fast Learner"] as Dictionary).get("cost", 450))
+    if slime.satisfaction < cost:
+        _status("Need %d satisfaction" % cost)
+        return
+    slime.satisfaction -= cost
+    slime.reward_traits.append("Fast Learner")
+    slime.add_moodlet("Reward unlocked", "Happy", 8.0, 20.0)
+    _status("Fast Learner unlocked")
+    _refresh_life_panel()
+    save_game(false)
+
+func _travel_next() -> void:
+    var lots := ["Home", "Puddle Park", "Mossy Cafe", "Community Workshop"]
+    var index := lots.find(household.current_lot)
+    household.current_lot = lots[(index + 1) % lots.size()]
+    for slime in household.slimes:
+        slime.add_moodlet("Visited %s" % household.current_lot, "Happy", 4.0, 16.0)
+    _status("Travelled to %s" % household.current_lot)
+    _refresh_life_panel()
+    save_game(false)
+
+func _do_social() -> void:
+    var selected := household.selected_slime()
+    if selected == null or social_target.item_count == 0 or social_target.selected < 0:
+        _status("Add another slime first")
+        return
+    var target_id := String(social_target.get_item_metadata(social_target.selected))
+    var interaction := social_action.get_item_text(maxi(social_action.selected, 0))
+    if household.social_interact(selected.slime_id, target_id, interaction):
+        var target := household.get_slime(target_id)
+        _status("%s: %s with %s" % [selected.display_name, interaction, target.display_name if target else "slime"])
+    _refresh_life_panel()
+    save_game(false)
 
 func _build_creator_dialog() -> void:
     creator_overlay = ColorRect.new()
@@ -708,6 +956,7 @@ func _toggle_build() -> void:
     build_tray.visible = build_mode
     needs_panel.visible = not build_mode and household.selected_slime() != null
     build_button.visible = not build_mode
+    life_button.visible = not build_mode
     build_system.set_cutaway_visible(not build_mode)
     for slime in household.slimes:
         slime.sim_enabled = not build_mode
@@ -731,6 +980,11 @@ func _cycle_speed() -> void:
     else:
         sim_speed = 0.0
     _status("Paused" if sim_speed == 0.0 else "%dx speed" % int(sim_speed))
+
+func _refresh_money() -> void:
+    if money_label == null:
+        return
+    money_label.text = "◉ %d   ·   Bills %d   ·   %s" % [household.funds, household.bills_due, household.current_lot]
 
 func _refresh_clock() -> void:
     if day_button == null:
@@ -848,6 +1102,7 @@ func load_game() -> bool:
     build_mode = false
     build_tray.visible = false
     build_button.visible = true
+    life_button.visible = true
     _refresh_family()
     _refresh_needs_panel()
     return true
