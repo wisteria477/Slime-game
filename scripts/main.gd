@@ -48,6 +48,9 @@ var status_label: Label
 var money_label: Label
 var life_button: Button
 var camera_button: Button
+var settings_button: Button
+var settings_overlay: ColorRect
+var settings_panel: PanelContainer
 var life_overlay: ColorRect
 var life_panel: PanelContainer
 var life_text: RichTextLabel
@@ -116,6 +119,7 @@ func _ready() -> void:
     add_child(camera_rig)
     _build_ui()
     _build_life_panel()
+    _build_settings_panel()
     _build_creator_dialog()
     _build_baby_dialog()
     _apply_platform_profile()
@@ -345,8 +349,10 @@ func _apply_responsive_layout() -> void:
         root_ui.theme = Theme.new()
     root_ui.theme.default_font_size = 24 if portrait else 20
 
-    day_button.custom_minimum_size = Vector2(230, 68) if portrait else Vector2(210, 62)
+    day_button.custom_minimum_size = Vector2(220, 64) if portrait else Vector2(210, 62)
     day_button.position = Vector2(18, 18)
+    settings_button.custom_minimum_size = Vector2(52, 52)
+    settings_button.position = Vector2(248 if portrait else 238, 24)
 
     family_panel.offset_left = -360 if portrait else -390
     family_panel.offset_right = -18
@@ -425,6 +431,12 @@ func _build_ui() -> void:
     day_button.add_theme_stylebox_override("hover", _panel_style(Color(0.72, 0.88, 0.88, 0.98), 28))
     day_button.add_theme_color_override("font_color", Color("193239"))
     root_ui.add_child(day_button)
+
+    settings_button = _button("⚙", _open_settings, Vector2(54, 54))
+    settings_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
+    settings_button.position = Vector2(250, 22)
+    settings_button.add_theme_font_size_override("font_size", 22)
+    root_ui.add_child(settings_button)
 
     family_panel = PanelContainer.new()
     family_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -687,37 +699,9 @@ func _build_life_panel() -> void:
 
     controls.add_child(_button("DO SOCIAL", _do_social, Vector2(240, 54)))
     controls.add_child(_button("PUDDLE PARTY", _start_party, Vector2(240, 54)))
-    controls.add_child(_button("MUSIC", _toggle_music, Vector2(240, 54)))
-    controls.add_child(_button("SFX", _toggle_sfx, Vector2(240, 54)))
-    controls.add_child(_button("MORTALITY", _toggle_mortality, Vector2(240, 54)))
     controls.add_child(_button("MOVE OUT", _move_out_selected, Vector2(240, 54)))
     controls.add_child(_button("MOVE IN LAST", _move_in_last, Vector2(240, 54)))
-    controls.add_child(_button("COPY SHARE", _copy_share_code, Vector2(240, 54)))
 
-    share_line = LineEdit.new()
-    share_line.placeholder_text = "Paste Slime Life share code"
-    share_line.custom_minimum_size = Vector2(240, 52)
-    _style_text_field(share_line)
-    controls.add_child(share_line)
-    controls.add_child(_button("IMPORT SHARE", _import_share_code, Vector2(240, 54)))
-
-    cheat_line = LineEdit.new()
-    cheat_line.placeholder_text = "Cheat command"
-    cheat_line.custom_minimum_size = Vector2(240, 52)
-    _style_text_field(cheat_line)
-    controls.add_child(cheat_line)
-    controls.add_child(_button("RUN CHEAT", _run_cheat, Vector2(240, 54)))
-
-    save_slot_option = OptionButton.new()
-    save_slot_option.custom_minimum_size = Vector2(240, 52)
-    _style_option(save_slot_option)
-    for slot in range(1, 4):
-        save_slot_option.add_item("Save Slot %d" % slot)
-        save_slot_option.set_item_metadata(save_slot_option.item_count - 1, slot)
-    save_slot_option.select(0)
-    controls.add_child(save_slot_option)
-    controls.add_child(_button("SAVE SLOT", _save_selected_slot, Vector2(240, 54)))
-    controls.add_child(_button("LOAD SLOT", _load_selected_slot, Vector2(240, 54)))
     controls.add_child(_button("CLOSE", _close_life_panel, Vector2(240, 54)))
 
 func _open_life_panel() -> void:
@@ -1101,6 +1085,90 @@ func _any_save_exists() -> bool:
             return true
     return false
 
+func _build_settings_panel() -> void:
+    settings_overlay = ColorRect.new()
+    settings_overlay.name = "SettingsOverlay"
+    settings_overlay.color = Color(0.03, 0.08, 0.10, 0.82)
+    settings_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    settings_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+    settings_overlay.visible = false
+    ui_layer.add_child(settings_overlay)
+
+    settings_panel = PanelContainer.new()
+    settings_panel.set_anchors_preset(Control.PRESET_CENTER)
+    settings_panel.position = Vector2(-330, -320)
+    settings_panel.custom_minimum_size = Vector2(660, 640)
+    settings_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.84, 0.94, 0.92, 0.995), 30))
+    settings_overlay.add_child(settings_panel)
+
+    var box := VBoxContainer.new()
+    box.add_theme_constant_override("separation", 10)
+    settings_panel.add_child(box)
+
+    var header := HBoxContainer.new()
+    box.add_child(header)
+    var title := _label("SETTINGS & HOUSEHOLD")
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    title.add_theme_font_size_override("font_size", 28)
+    header.add_child(title)
+    header.add_child(_button("✕", _close_settings, Vector2(58, 50)))
+
+    var section := GridContainer.new()
+    section.columns = 2
+    section.add_theme_constant_override("h_separation", 10)
+    section.add_theme_constant_override("v_separation", 8)
+    box.add_child(section)
+
+    section.add_child(_button("MUSIC", _toggle_music, Vector2(250, 52)))
+    section.add_child(_button("SFX", _toggle_sfx, Vector2(250, 52)))
+    section.add_child(_button("MORTALITY", _toggle_mortality, Vector2(250, 52)))
+    section.add_child(_button("PAY BILLS", _pay_bills, Vector2(250, 52)))
+
+    save_slot_option = OptionButton.new()
+    save_slot_option.custom_minimum_size = Vector2(250, 52)
+    _style_option(save_slot_option)
+    for slot in range(1, 4):
+        save_slot_option.add_item("Save Slot %d" % slot)
+        save_slot_option.set_item_metadata(save_slot_option.item_count - 1, slot)
+    save_slot_option.select(0)
+    section.add_child(save_slot_option)
+
+    var save_row := HBoxContainer.new()
+    save_row.add_theme_constant_override("separation", 6)
+    save_row.add_child(_button("SAVE", _save_selected_slot, Vector2(118, 52)))
+    save_row.add_child(_button("LOAD", _load_selected_slot, Vector2(118, 52)))
+    section.add_child(save_row)
+
+    var share_title := _label("Household sharing")
+    share_title.add_theme_font_size_override("font_size", 18)
+    box.add_child(share_title)
+    share_line = LineEdit.new()
+    share_line.placeholder_text = "Paste Slime Life share code"
+    share_line.custom_minimum_size = Vector2(0, 52)
+    _style_text_field(share_line)
+    box.add_child(share_line)
+    var share_buttons := HBoxContainer.new()
+    share_buttons.add_theme_constant_override("separation", 8)
+    share_buttons.add_child(_button("COPY SHARE", _copy_share_code, Vector2(200, 52)))
+    share_buttons.add_child(_button("IMPORT", _import_share_code, Vector2(160, 52)))
+    box.add_child(share_buttons)
+
+    var advanced_title := _label("Advanced")
+    advanced_title.add_theme_font_size_override("font_size", 18)
+    box.add_child(advanced_title)
+    cheat_line = LineEdit.new()
+    cheat_line.placeholder_text = "Cheat command"
+    cheat_line.custom_minimum_size = Vector2(0, 52)
+    _style_text_field(cheat_line)
+    box.add_child(cheat_line)
+    box.add_child(_button("RUN CHEAT", _run_cheat, Vector2(200, 52)))
+
+func _open_settings() -> void:
+    settings_overlay.visible = true
+
+func _close_settings() -> void:
+    settings_overlay.visible = false
+
 func _build_creator_dialog() -> void:
     creator_overlay = ColorRect.new()
     creator_overlay.name = "CreatorOverlay"
@@ -1460,6 +1528,10 @@ func _toggle_build() -> void:
     life_button.visible = not build_mode
     camera_button.visible = not build_mode
     needs_toggle_button.visible = not build_mode
+    settings_button.visible = not build_mode
+    day_button.visible = not build_mode
+    family_panel.visible = not build_mode
+    money_label.visible = not build_mode
     build_system.set_cutaway_visible(not build_mode)
     for slime in household.slimes:
         slime.sim_enabled = not build_mode
@@ -1829,6 +1901,10 @@ func load_game(slot := -1) -> bool:
     life_button.visible = true
     camera_button.visible = true
     needs_toggle_button.visible = true
+    settings_button.visible = true
+    day_button.visible = true
+    family_panel.visible = true
+    money_label.visible = true
     _refresh_family()
     _refresh_needs_panel()
     _refresh_money()
