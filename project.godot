@@ -6,7 +6,7 @@ config_version=5
 config/name="Slime Life"
 config/version="0.1.0"
 config/unique_name="com.slimelife.game"
-config/icon="res://assets/icons/slime_life_icon.png"
+config/icon="res://assets/icons/slime_life_icon.svg"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
