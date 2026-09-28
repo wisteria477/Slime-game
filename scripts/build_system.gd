@@ -216,7 +216,7 @@ func _make_lot_ground() -> void:
     mesh.size = Vector3(GRID_SIZE.x * CELL_SIZE + 2.4, 0.12, GRID_SIZE.y * CELL_SIZE + 2.4)
     ground.mesh = mesh
     ground.position = Vector3((GRID_SIZE.x - 1) * CELL_SIZE * 0.5, -0.08, (GRID_SIZE.y - 1) * CELL_SIZE * 0.5)
-    ground.material_override = _material(Color("8dbb73"), 0.95)
+    ground.material_override = _material(Color("55745f"), 0.96)
     add_child(ground)
 
 func _place_floor(cell: Vector2i) -> void:
@@ -230,7 +230,8 @@ func _place_floor(cell: Vector2i) -> void:
     mesh.size = Vector3(CELL_SIZE * 0.985, 0.08, CELL_SIZE * 0.985)
     obj.mesh = mesh
     obj.position = cell_to_world(cell) + Vector3(0, 0.015, 0)
-    obj.material_override = _material(Color("d8c5a8"), 0.82)
+    var floor_color := Color("9a7e62") if (cell.x + cell.y) % 2 == 0 else Color("a8896b")
+    obj.material_override = _material(floor_color, 0.88)
     floor_root.add_child(obj)
 
 func _place_wall(cell: Vector2i, orientation: String, is_door: bool) -> void:
@@ -260,11 +261,18 @@ func _place_wall(cell: Vector2i, orientation: String, is_door: bool) -> void:
         mesh.size = Vector3(CELL_SIZE, WALL_HEIGHT, 0.10) if o == "N" else Vector3(0.10, WALL_HEIGHT, CELL_SIZE)
         body.mesh = mesh
         body.position = center
-        body.material_override = _material(Color("e8e1d7"), 0.88)
+        body.material_override = _material(Color("c7b9a5"), 0.92)
+        var base_trim := MeshInstance3D.new()
+        var trim_mesh := BoxMesh.new()
+        trim_mesh.size = Vector3(CELL_SIZE, 0.16, 0.14) if o == "N" else Vector3(0.14, 0.16, CELL_SIZE)
+        base_trim.mesh = trim_mesh
+        base_trim.position = center - Vector3(0, WALL_HEIGHT * 0.5 - 0.08, 0)
+        base_trim.material_override = _material(Color("66584c"), 0.94)
+        root.add_child(base_trim)
         root.add_child(body)
 
 func _make_door_visual(root: Node3D, center: Vector3, orientation: String) -> void:
-    var frame_mat := _material(Color("806247"), 0.82)
+    var frame_mat := _material(Color("5a4a3d"), 0.92)
     var width := CELL_SIZE
     var post_h := WALL_HEIGHT
     for side in [-1.0, 1.0]:
@@ -286,6 +294,14 @@ func _make_door_visual(root: Node3D, center: Vector3, orientation: String) -> vo
     header.material_override = frame_mat
     root.add_child(header)
 
+    var threshold := MeshInstance3D.new()
+    var threshold_mesh := BoxMesh.new()
+    threshold_mesh.size = Vector3(width * 0.9, 0.06, 0.18) if orientation == "N" else Vector3(0.18, 0.06, width * 0.9)
+    threshold.mesh = threshold_mesh
+    threshold.position = center - Vector3(0, WALL_HEIGHT * 0.5 - 0.03, 0)
+    threshold.material_override = _material(Color("3e342d"), 0.96)
+    root.add_child(threshold)
+
 func _place_furniture(cell: Vector2i, kind: String) -> void:
     if not floors.has(_cell_key(cell)):
         return
@@ -300,19 +316,19 @@ func _place_furniture(cell: Vector2i, kind: String) -> void:
 func _make_furniture_visual(root: Node3D, kind: String) -> void:
     match kind:
         "bed":
-            _box(root, Vector3(1.05, 0.28, 1.15), Vector3(0, 0.19, 0), Color("c9b5db"))
-            _box(root, Vector3(1.0, 0.12, 0.30), Vector3(0, 0.39, -0.37), Color("f5efe8"))
+            _box(root, Vector3(1.05, 0.28, 1.15), Vector3(0, 0.19, 0), Color("8f76ad"))
+            _box(root, Vector3(1.0, 0.12, 0.30), Vector3(0, 0.39, -0.37), Color("e8ded3"))
         "food":
-            _box(root, Vector3(0.86, 1.05, 0.86), Vector3(0, 0.53, 0), Color("8ba88e"))
-            _box(root, Vector3(0.72, 0.07, 0.72), Vector3(0, 1.08, 0), Color("dde6da"))
+            _box(root, Vector3(0.86, 1.05, 0.86), Vector3(0, 0.53, 0), Color("547a62"))
+            _box(root, Vector3(0.72, 0.07, 0.72), Vector3(0, 1.08, 0), Color("b8ccb8"))
         "bath":
-            _box(root, Vector3(1.08, 0.48, 0.92), Vector3(0, 0.25, 0), Color("d4e9ee"))
+            _box(root, Vector3(1.08, 0.48, 0.92), Vector3(0, 0.25, 0), Color("79aeb7"))
         "toy":
-            _sphere(root, 0.34, Vector3(-0.18, 0.34, 0), Color("ef9aaa"))
-            _sphere(root, 0.28, Vector3(0.22, 0.28, 0.12), Color("f0c36d"))
+            _sphere(root, 0.34, Vector3(-0.18, 0.34, 0), Color("d75f82"))
+            _sphere(root, 0.28, Vector3(0.22, 0.28, 0.12), Color("d69b43"))
         "sofa":
-            _box(root, Vector3(1.12, 0.44, 0.82), Vector3(0, 0.24, 0), Color("7ea27d"))
-            _box(root, Vector3(1.10, 0.52, 0.20), Vector3(0, 0.64, 0.30), Color("729471"))
+            _box(root, Vector3(1.12, 0.44, 0.82), Vector3(0, 0.24, 0), Color("527754"))
+            _box(root, Vector3(1.10, 0.52, 0.20), Vector3(0, 0.64, 0.30), Color("456846"))
 
 func _box(root: Node3D, size: Vector3, position: Vector3, color: Color) -> void:
     var m := MeshInstance3D.new()
