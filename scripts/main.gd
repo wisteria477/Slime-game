@@ -50,6 +50,7 @@ var touch_starts: Dictionary = {}
 var touch_moved: Dictionary = {}
 var pinch_distance := 0.0
 var pinch_centroid := Vector2.ZERO
+var last_viewport_size := Vector2.ZERO
 
 func _ready() -> void:
     Engine.max_fps = 60
@@ -73,9 +74,14 @@ func _ready() -> void:
     _build_creator_dialog()
     _build_baby_dialog()
     _apply_platform_profile()
+    _apply_responsive_layout()
     _show_start_screen()
 
 func _process(delta: float) -> void:
+    var viewport_size := get_viewport().get_visible_rect().size
+    if viewport_size != last_viewport_size:
+        last_viewport_size = viewport_size
+        _apply_responsive_layout()
     _desktop_camera(delta)
     if not build_mode and sim_speed > 0.0:
         var sim_delta := delta * sim_speed
@@ -227,25 +233,70 @@ func _make_environment() -> void:
     var world_env := WorldEnvironment.new()
     var env := Environment.new()
     env.background_mode = Environment.BG_COLOR
-    env.background_color = Color("cfe6f0")
+    env.background_color = Color("819da5")
     env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    env.ambient_light_color = Color("eef7ff")
-    env.ambient_light_energy = 0.78
+    env.ambient_light_color = Color("b6c8ca")
+    env.ambient_light_energy = 0.34
     env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
     world_env.environment = env
     add_child(world_env)
     sun = DirectionalLight3D.new()
     sun.rotation_degrees = Vector3(-52, -38, 0)
-    sun.light_energy = 1.15
+    sun.light_color = Color("fff0d6")
+    sun.light_energy = 0.72
     sun.shadow_enabled = true
     add_child(sun)
 
 func _apply_platform_profile() -> void:
-    var mobile := OS.get_name() == "Android" or OS.get_name() == "iOS"
+    var mobile := OS.get_name() == "Android" or OS.get_name() == "iOS" or OS.has_feature("web")
     if mobile:
-        RenderingServer.viewport_set_scaling_3d_scale(get_viewport().get_viewport_rid(), 0.82)
+        RenderingServer.viewport_set_scaling_3d_scale(get_viewport().get_viewport_rid(), 0.90)
         if sun:
             sun.shadow_enabled = false
+
+func _apply_responsive_layout() -> void:
+    if camera_rig == null or root_ui == null:
+        return
+    var size := get_viewport().get_visible_rect().size
+    if size.x <= 0.0 or size.y <= 0.0:
+        return
+    var phone_like := OS.get_name() == "Android" or OS.get_name() == "iOS" or OS.has_feature("web")
+    if not phone_like:
+        return
+    var portrait := size.y > size.x
+    camera_rig.set_phone_view(portrait)
+
+    if root_ui.theme == null:
+        root_ui.theme = Theme.new()
+    root_ui.theme.default_font_size = 24 if portrait else 20
+
+    day_button.custom_minimum_size = Vector2(250, 72) if portrait else Vector2(210, 62)
+    day_button.position = Vector2(22, 22)
+
+    family_panel.offset_left = -590 if portrait else -500
+    family_panel.offset_right = -22
+    family_panel.offset_top = 22
+    family_panel.offset_bottom = 98 if portrait else 88
+
+    needs_panel.offset_left = 70 if portrait else 150
+    needs_panel.offset_right = -70 if portrait else -150
+    needs_panel.offset_top = -138 if portrait else -106
+    needs_panel.offset_bottom = -26
+    needs_title.add_theme_font_size_override("font_size", 26 if portrait else 22)
+
+    build_button.custom_minimum_size = Vector2(138, 68)
+    build_button.offset_left = -160
+    build_button.offset_right = -22
+    build_button.offset_top = -94
+    build_button.offset_bottom = -26
+
+    build_tray.offset_left = 24
+    build_tray.offset_right = -24
+    build_tray.offset_top = -132 if portrait else -108
+    build_tray.offset_bottom = -24
+
+    status_label.offset_top = 116 if portrait else 24
+    status_label.add_theme_font_size_override("font_size", 24 if portrait else 20)
 
 func _build_ui() -> void:
     ui_layer = CanvasLayer.new()
@@ -258,8 +309,9 @@ func _build_ui() -> void:
     day_button = _button("Day 1 · 8:00 AM", _cycle_speed, Vector2(180, 60))
     day_button.set_anchors_preset(Control.PRESET_TOP_LEFT)
     day_button.position = Vector2(18, 18)
-    day_button.add_theme_stylebox_override("normal", _panel_style(Color(0.92, 0.97, 1.0, 0.94), 28))
-    day_button.add_theme_stylebox_override("hover", _panel_style(Color(0.98, 1.0, 1.0, 0.98), 28))
+    day_button.add_theme_stylebox_override("normal", _panel_style(Color(0.62, 0.80, 0.82, 0.96), 28))
+    day_button.add_theme_stylebox_override("hover", _panel_style(Color(0.72, 0.88, 0.88, 0.98), 28))
+    day_button.add_theme_font_color_override("font_color", Color("193239"))
     root_ui.add_child(day_button)
 
     family_panel = PanelContainer.new()
@@ -268,7 +320,7 @@ func _build_ui() -> void:
     family_panel.offset_right = -18
     family_panel.offset_top = 18
     family_panel.offset_bottom = 86
-    family_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.73, 0.94, 0.98, 0.92), 32))
+    family_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.40, 0.66, 0.68, 0.96), 32))
     family_panel.mouse_filter = Control.MOUSE_FILTER_STOP
     root_ui.add_child(family_panel)
     family_row = HBoxContainer.new()
@@ -289,14 +341,15 @@ func _build_ui() -> void:
     needs_panel.offset_right = -180
     needs_panel.offset_top = -96
     needs_panel.offset_bottom = -18
-    needs_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.86, 0.97, 1.0, 0.93), 30))
+    needs_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.55, 0.76, 0.77, 0.97), 30))
     needs_panel.mouse_filter = Control.MOUSE_FILTER_STOP
     root_ui.add_child(needs_panel)
     var needs_box := VBoxContainer.new()
     needs_panel.add_child(needs_box)
     needs_title = Label.new()
     needs_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    needs_title.add_theme_font_size_override("font_size", 18)
+    needs_title.add_theme_font_size_override("font_size", 22)
+    needs_title.add_theme_color_override("font_color", Color("183238"))
     needs_box.add_child(needs_title)
     needs_row = HBoxContainer.new()
     needs_row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -309,7 +362,7 @@ func _build_ui() -> void:
     build_tray.offset_right = -40
     build_tray.offset_top = -100
     build_tray.offset_bottom = -18
-    build_tray.add_theme_stylebox_override("panel", _panel_style(Color(0.84, 0.95, 0.93, 0.96), 26))
+    build_tray.add_theme_stylebox_override("panel", _panel_style(Color(0.43, 0.66, 0.61, 0.98), 26))
     build_tray.mouse_filter = Control.MOUSE_FILTER_STOP
     root_ui.add_child(build_tray)
     build_row = HBoxContainer.new()
@@ -328,6 +381,10 @@ func _build_ui() -> void:
     status_label.offset_right = 240
     status_label.offset_top = 18
     status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    status_label.add_theme_color_override("font_color", Color("173039"))
+    status_label.add_theme_color_override("font_outline_color", Color(0.92, 0.98, 0.98, 0.75))
+    status_label.add_theme_constant_override("outline_size", 5)
+    status_label.add_theme_font_size_override("font_size", 20)
     status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     root_ui.add_child(status_label)
     _refresh_family()
@@ -510,7 +567,7 @@ func _refresh_clock() -> void:
     day_button.text = "%s Day %d · %d:%02d %s%s" % [symbol, world_day, display_hour, minute, suffix, speed_text]
     if sun:
         var daylight := clampf(sin((world_minutes / (24.0 * 60.0)) * TAU - PI * 0.5) * 0.55 + 0.65, 0.18, 1.0)
-        sun.light_energy = 0.25 + daylight * 1.05
+        sun.light_energy = 0.30 + daylight * 0.58
 
 func _refresh_family() -> void:
     if family_row == null:
@@ -618,12 +675,20 @@ func _button(text_value: String, callback: Callable, size := Vector2(90, 48)) ->
     button.text = text_value
     button.custom_minimum_size = size
     button.focus_mode = Control.FOCUS_ALL
+    button.add_theme_font_size_override("font_size", 20)
+    button.add_theme_color_override("font_color", Color("173039"))
+    button.add_theme_color_override("font_hover_color", Color("0f252d"))
+    button.add_theme_color_override("font_pressed_color", Color("10262c"))
+    button.add_theme_stylebox_override("normal", _panel_style(Color(0.78, 0.90, 0.89, 0.98), 16))
+    button.add_theme_stylebox_override("hover", _panel_style(Color(0.86, 0.95, 0.93, 1.0), 16))
+    button.add_theme_stylebox_override("pressed", _panel_style(Color(0.58, 0.78, 0.75, 1.0), 16))
     button.pressed.connect(callback)
     return button
 
 func _label(text_value: String) -> Label:
     var label := Label.new()
     label.text = text_value
+    label.add_theme_color_override("font_color", Color("173039"))
     return label
 
 func _panel_style(color: Color, radius: int) -> StyleBoxFlat:
@@ -637,7 +702,7 @@ func _panel_style(color: Color, radius: int) -> StyleBoxFlat:
     style.border_width_top = 2
     style.border_width_right = 2
     style.border_width_bottom = 2
-    style.border_color = Color(1, 1, 1, 0.45)
+    style.border_color = Color(0.14, 0.27, 0.29, 0.35)
     style.content_margin_left = 10
     style.content_margin_right = 10
     style.content_margin_top = 7
