@@ -1053,15 +1053,63 @@ func _furniture_node_name(cell: Vector2i) -> String:
 
 
 func set_cutaway_visible(enabled: bool) -> void:
-    # Hide the two exterior edges nearest the default isometric camera in Live mode.
-    # The walls remain in simulation/pathfinding; only their meshes are hidden.
+    update_cutaway_for_yaw(-45.0, enabled)
+
+func update_cutaway_for_yaw(yaw_degrees: float, enabled: bool) -> void:
+    # Restore all four exterior edges first.
     for x in range(1, 10):
-        var south_key := _wall_key(Vector2i(x, 8), "N")
-        var south_node := wall_root.get_node_or_null(_wall_node_name(south_key))
-        if south_node:
-            south_node.visible = not enabled
+        var north := wall_root.get_node_or_null(_wall_node_name(_wall_key(Vector2i(x, 1), "N")))
+        var south := wall_root.get_node_or_null(_wall_node_name(_wall_key(Vector2i(x, 8), "N")))
+        if north:
+            north.visible = true
+        if south:
+            south.visible = true
     for z in range(1, 8):
-        var west_key := _wall_key(Vector2i(1, z), "W")
-        var west_node := wall_root.get_node_or_null(_wall_node_name(west_key))
-        if west_node:
-            west_node.visible = not enabled
+        var west := wall_root.get_node_or_null(_wall_node_name(_wall_key(Vector2i(1, z), "W")))
+        var east := wall_root.get_node_or_null(_wall_node_name(_wall_key(Vector2i(10, z), "W")))
+        if west:
+            west.visible = true
+        if east:
+            east.visible = true
+
+    if not enabled:
+        return
+
+    var normalized := wrapf(yaw_degrees, -180.0, 180.0)
+    var hide_north := false
+    var hide_south := false
+    var hide_west := false
+    var hide_east := false
+
+    if normalized >= -135.0 and normalized < -45.0:
+        hide_south = true
+        hide_west = true
+    elif normalized >= -45.0 and normalized < 45.0:
+        hide_south = true
+        hide_east = true
+    elif normalized >= 45.0 and normalized < 135.0:
+        hide_north = true
+        hide_east = true
+    else:
+        hide_north = true
+        hide_west = true
+
+    for x in range(1, 10):
+        if hide_north:
+            var north := wall_root.get_node_or_null(_wall_node_name(_wall_key(Vector2i(x, 1), "N")))
+            if north:
+                north.visible = false
+        if hide_south:
+            var south := wall_root.get_node_or_null(_wall_node_name(_wall_key(Vector2i(x, 8), "N")))
+            if south:
+                south.visible = false
+    for z in range(1, 8):
+        if hide_west:
+            var west := wall_root.get_node_or_null(_wall_node_name(_wall_key(Vector2i(1, z), "W")))
+            if west:
+                west.visible = false
+        if hide_east:
+            var east := wall_root.get_node_or_null(_wall_node_name(_wall_key(Vector2i(10, z), "W")))
+            if east:
+                east.visible = false
+
