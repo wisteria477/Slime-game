@@ -28,7 +28,7 @@ var day_button: Button
 var family_panel: PanelContainer
 var family_row: HBoxContainer
 var needs_panel: PanelContainer
-var needs_row: HBoxContainer
+var needs_row: GridContainer
 var needs_title: Label
 var needs_profile: Label
 var build_button: Button
@@ -38,6 +38,7 @@ var build_row: GridContainer
 var status_label: Label
 var money_label: Label
 var life_button: Button
+var camera_button: Button
 var life_overlay: ColorRect
 var life_panel: PanelContainer
 var life_text: RichTextLabel
@@ -278,7 +279,7 @@ func _select_slime_from_screen(screen_pos: Vector2) -> bool:
     var collider = hit.get("collider")
     if collider is SlimeAgent:
         household.select_slime(collider.slime_id)
-        camera_rig.focus_on(collider.global_position, 10.5)
+        camera_rig.focus_on(collider.global_position)
         _status(collider.display_name)
         return true
     return false
@@ -324,18 +325,24 @@ func _apply_responsive_layout() -> void:
         root_ui.theme = Theme.new()
     root_ui.theme.default_font_size = 24 if portrait else 20
 
-    day_button.custom_minimum_size = Vector2(250, 72) if portrait else Vector2(210, 62)
-    day_button.position = Vector2(22, 22)
+    day_button.custom_minimum_size = Vector2(230, 68) if portrait else Vector2(210, 62)
+    day_button.position = Vector2(18, 18)
 
-    family_panel.offset_left = -590 if portrait else -500
-    family_panel.offset_right = -22
-    family_panel.offset_top = 22
-    family_panel.offset_bottom = 98 if portrait else 88
+    family_panel.offset_left = -520 if portrait else -500
+    family_panel.offset_right = -18
+    family_panel.offset_top = 18
+    family_panel.offset_bottom = 88 if portrait else 88
 
-    needs_panel.offset_left = 70 if portrait else 150
-    needs_panel.offset_right = -70 if portrait else -150
-    needs_panel.offset_top = -138 if portrait else -106
-    needs_panel.offset_bottom = -26
+    money_label.offset_left = -250 if portrait else -220
+    money_label.offset_right = 250 if portrait else 220
+    money_label.offset_top = 96 if portrait else 24
+    money_label.offset_bottom = 136 if portrait else 64
+    money_label.add_theme_font_size_override("font_size", 18 if portrait else 20)
+
+    needs_panel.offset_left = 38 if portrait else 150
+    needs_panel.offset_right = -38 if portrait else -150
+    needs_panel.offset_top = -222 if portrait else -130
+    needs_panel.offset_bottom = -22
     needs_title.add_theme_font_size_override("font_size", 26 if portrait else 22)
     if needs_profile:
         needs_profile.add_theme_font_size_override("font_size", 18 if portrait else 15)
@@ -347,22 +354,26 @@ func _apply_responsive_layout() -> void:
     life_button.offset_left = 22
     life_button.offset_right = 176
     if portrait:
-        build_button.offset_top = -230
-        build_button.offset_bottom = -158
-        life_button.offset_top = -230
-        life_button.offset_bottom = -158
+        build_button.offset_top = -300
+        build_button.offset_bottom = -228
+        life_button.offset_top = -300
+        life_button.offset_bottom = -228
+        camera_button.offset_top = -300
+        camera_button.offset_bottom = -228
     else:
         build_button.offset_top = -94
         build_button.offset_bottom = -22
         life_button.offset_top = -94
         life_button.offset_bottom = -22
+        camera_button.offset_top = -94
+        camera_button.offset_bottom = -22
 
     build_tray.offset_left = 24
     build_tray.offset_right = -24
     build_tray.offset_top = -310 if portrait else -250
     build_tray.offset_bottom = -24
 
-    status_label.offset_top = 116 if portrait else 24
+    status_label.offset_top = 142 if portrait else 24
     status_label.add_theme_font_size_override("font_size", 24 if portrait else 20)
 
 func _build_ui() -> void:
@@ -409,7 +420,7 @@ func _build_ui() -> void:
     family_panel.add_child(family_row)
 
     life_button = _button("LIFE", _open_life_panel, Vector2(104, 54))
-    var camera_button := _button("VIEW", _reset_camera, Vector2(104, 54))
+    camera_button = _button("VIEW", _reset_camera, Vector2(104, 54))
     camera_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
     camera_button.offset_left = 132
     camera_button.offset_right = 236
@@ -452,9 +463,10 @@ func _build_ui() -> void:
     needs_profile.add_theme_font_size_override("font_size", 15)
     needs_profile.add_theme_color_override("font_color", Color("24474c"))
     needs_box.add_child(needs_profile)
-    needs_row = HBoxContainer.new()
-    needs_row.alignment = BoxContainer.ALIGNMENT_CENTER
-    needs_row.add_theme_constant_override("separation", 8)
+    needs_row = GridContainer.new()
+    needs_row.columns = 4
+    needs_row.add_theme_constant_override("h_separation", 12)
+    needs_row.add_theme_constant_override("v_separation", 7)
     needs_box.add_child(needs_row)
 
     build_tray = PanelContainer.new()
@@ -1434,7 +1446,7 @@ func _select_and_focus(id_value: String) -> void:
     household.select_slime(id_value)
     var slime := household.get_slime(id_value)
     if slime:
-        camera_rig.focus_on(slime.global_position, 10.5)
+        camera_rig.focus_on(slime.global_position)
 
 func _reset_camera() -> void:
     camera_rig.reset_view()
@@ -1454,10 +1466,10 @@ func _refresh_needs_panel() -> void:
     if slime == null:
         return
     needs_title.text = "%s · %s" % [slime.display_name, slime.age_stage]
-    needs_profile.text = "%s   •   %s" % [slime.profile_text(), slime.activity_text()]
+    needs_profile.text = "%s\n%s" % [slime.profile_text(), slime.activity_text()]
     for key in NEEDS:
         var box := VBoxContainer.new()
-        box.custom_minimum_size = Vector2(86, 42)
+        box.custom_minimum_size = Vector2(118, 48)
         var label := _label(key.capitalize())
         label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         label.add_theme_font_size_override("font_size", 12)
@@ -1468,7 +1480,7 @@ func _refresh_needs_panel() -> void:
         bar.max_value = 100
         bar.value = float(slime.needs.get(key, 0.0))
         bar.show_percentage = false
-        bar.custom_minimum_size = Vector2(82, 10)
+        bar.custom_minimum_size = Vector2(112, 12)
         box.add_child(bar)
         needs_row.add_child(box)
 
