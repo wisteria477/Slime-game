@@ -84,6 +84,8 @@ var selection_disc: MeshInstance3D
 var state_label: Label3D
 var base_visual_scale := Vector3.ONE
 var idle_phase := 0.0
+var face_base_scales: Dictionary = {}
+var face_base_rotations: Dictionary = {}
 
 func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref, personality_value := "Bubbly", habits_value: Array[String] = [], appearance_value: Dictionary = {}) -> void:
     slime_id = id_value
@@ -102,6 +104,7 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     wants = SlimeLifeRules.random_wants(rng, 3)
     fears = [SlimeLifeRules.random_fear(rng)]
     _build_character()
+    _capture_face_defaults()
     _apply_age_scale()
     _apply_appearance()
     _update_emotion()
@@ -429,34 +432,103 @@ func _apply_appearance() -> void:
         elif antenna_style == "Bubble":
             antenna_tip.scale *= 1.35
 
+func _capture_face_defaults() -> void:
+    if visual_root == null:
+        return
+    for node_name in ["EyeL", "EyeR", "Mouth", "CheekL", "CheekR"]:
+        var node := visual_root.get_node_or_null(node_name) as Node3D
+        if node:
+            face_base_scales[node_name] = node.scale
+            face_base_rotations[node_name] = node.rotation
+
+func _reset_face_node(node_name: String) -> Node3D:
+    if visual_root == null:
+        return null
+    var node := visual_root.get_node_or_null(node_name) as Node3D
+    if node == null:
+        return null
+    if face_base_scales.has(node_name):
+        node.scale = face_base_scales[node_name]
+    if face_base_rotations.has(node_name):
+        node.rotation = face_base_rotations[node_name]
+    return node
+
 func _update_expression_visual() -> void:
     if visual_root == null:
         return
-    var eye_l := visual_root.get_node_or_null("EyeL") as Node3D
-    var eye_r := visual_root.get_node_or_null("EyeR") as Node3D
-    var mouth := visual_root.get_node_or_null("Mouth") as Node3D
+    var eye_l := _reset_face_node("EyeL")
+    var eye_r := _reset_face_node("EyeR")
+    var mouth := _reset_face_node("Mouth")
+    var cheek_l := _reset_face_node("CheekL")
+    var cheek_r := _reset_face_node("CheekR")
     if eye_l == null or eye_r == null or mouth == null:
         return
+
+    var blink_wave := sin(Time.get_ticks_msec() * 0.0017 + idle_phase * 2.0)
+    var blinking := blink_wave > 0.985
+    if blinking:
+        eye_l.scale.y *= 0.16
+        eye_r.scale.y *= 0.16
+
     match emotion:
-        "Happy", "Playful", "Inspired":
-            mouth.scale = Vector3(1.35, 0.75, 1.0)
-            eye_l.rotation.z = -0.05
-            eye_r.rotation.z = 0.05
+        "Happy":
+            mouth.scale.x *= 1.42
+            mouth.scale.y *= 0.72
+            eye_l.rotation.z -= 0.05
+            eye_r.rotation.z += 0.05
+            if cheek_l:
+                cheek_l.scale *= 1.12
+            if cheek_r:
+                cheek_r.scale *= 1.12
+        "Playful":
+            mouth.scale.x *= 1.50
+            mouth.scale.y *= 0.86
+            eye_l.scale *= 1.08
+            eye_r.scale.y *= 0.72
+            eye_l.rotation.z -= 0.10
+            eye_r.rotation.z -= 0.10
+        "Inspired", "Focused":
+            mouth.scale.x *= 0.84
+            mouth.scale.y *= 0.66
+            eye_l.scale.y *= 1.10
+            eye_r.scale.y *= 1.10
         "Sad":
-            mouth.scale = Vector3(0.92, 0.70, 1.0)
-            mouth.rotation.z = PI
-            eye_l.rotation.z = 0.10
-            eye_r.rotation.z = -0.10
+            mouth.scale.x *= 0.92
+            mouth.scale.y *= 0.62
+            mouth.rotation.z += PI
+            eye_l.rotation.z += 0.13
+            eye_r.rotation.z -= 0.13
         "Angry":
-            mouth.scale = Vector3(0.88, 0.55, 1.0)
-            eye_l.rotation.z = 0.18
-            eye_r.rotation.z = -0.18
+            mouth.scale.x *= 0.82
+            mouth.scale.y *= 0.50
+            eye_l.rotation.z += 0.24
+            eye_r.rotation.z -= 0.24
+            if cheek_l:
+                cheek_l.scale *= 1.18
+            if cheek_r:
+                cheek_r.scale *= 1.18
+        "Embarrassed":
+            mouth.scale *= 0.70
+            eye_l.scale.y *= 0.82
+            eye_r.scale.y *= 0.82
+            if cheek_l:
+                cheek_l.scale *= 1.35
+            if cheek_r:
+                cheek_r.scale *= 1.35
+        "Uncomfortable":
+            mouth.rotation.z += 0.16
+            eye_l.rotation.z += 0.10
+            eye_r.rotation.z += 0.10
         "Tired":
-            eye_l.scale.y = absf(eye_l.scale.y) * 0.55
-            eye_r.scale.y = absf(eye_r.scale.y) * 0.55
-            mouth.scale = Vector3(0.72, 0.72, 1.0)
+            eye_l.scale.y *= 0.42
+            eye_r.scale.y *= 0.42
+            mouth.scale *= 0.72
+        "Energized":
+            eye_l.scale *= 1.14
+            eye_r.scale *= 1.14
+            mouth.scale.x *= 1.18
         _:
-            mouth.rotation.z = 0.0
+            pass
 
 func become_ghost() -> void:
     if life_state == "ghost":
