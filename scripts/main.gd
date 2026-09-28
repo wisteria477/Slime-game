@@ -32,13 +32,15 @@ var baby_button: Button
 var build_tray: PanelContainer
 var build_row: HBoxContainer
 var status_label: Label
-var creator_dialog: AcceptDialog
+var creator_overlay: ColorRect
+var creator_panel: PanelContainer
 var creator_name: LineEdit
 var creator_color: OptionButton
 var creator_personality: OptionButton
 var creator_habit_a: OptionButton
 var creator_habit_b: OptionButton
-var baby_dialog: AcceptDialog
+var baby_overlay: ColorRect
+var baby_panel: PanelContainer
 var parent_a: OptionButton
 var parent_b: OptionButton
 var baby_name: LineEdit
@@ -408,74 +410,173 @@ func _build_ui() -> void:
     _refresh_needs_panel()
 
 func _build_creator_dialog() -> void:
-    creator_dialog = AcceptDialog.new()
-    creator_dialog.title = "Make a Slime"
-    creator_dialog.ok_button_text = "Create Slime"
-    ui_layer.add_child(creator_dialog)
+    creator_overlay = ColorRect.new()
+    creator_overlay.name = "CreatorOverlay"
+    creator_overlay.color = Color(0.03, 0.08, 0.10, 0.78)
+    creator_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    creator_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+    creator_overlay.visible = false
+    ui_layer.add_child(creator_overlay)
+
+    creator_panel = PanelContainer.new()
+    creator_panel.set_anchors_preset(Control.PRESET_CENTER)
+    creator_panel.position = Vector2(-310, -280)
+    creator_panel.custom_minimum_size = Vector2(620, 560)
+    creator_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.80, 0.93, 0.92, 0.99), 32))
+    creator_overlay.add_child(creator_panel)
+
     var box := VBoxContainer.new()
-    box.custom_minimum_size = Vector2(520, 500)
-    box.add_theme_constant_override("separation", 8)
-    creator_dialog.add_child(box)
+    box.add_theme_constant_override("separation", 10)
+    creator_panel.add_child(box)
+
+    var header := HBoxContainer.new()
+    box.add_child(header)
+    var title := _label("MAKE A SLIME")
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    title.add_theme_font_size_override("font_size", 30)
+    header.add_child(title)
+    header.add_child(_button("✕", _cancel_creator, Vector2(58, 50)))
+
+    var subtitle := _label("Choose who they are. Personality and habits change what they do on their own.")
+    subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    subtitle.add_theme_font_size_override("font_size", 16)
+    box.add_child(subtitle)
 
     box.add_child(_label("Name"))
     creator_name = LineEdit.new()
     creator_name.placeholder_text = "Nim"
-    creator_name.custom_minimum_size = Vector2(0, 52)
+    creator_name.custom_minimum_size = Vector2(0, 50)
+    _style_text_field(creator_name)
     box.add_child(creator_name)
 
-    box.add_child(_label("Color"))
+    var row_one := HBoxContainer.new()
+    row_one.add_theme_constant_override("separation", 10)
+    box.add_child(row_one)
+
+    var color_box := VBoxContainer.new()
+    color_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    color_box.add_child(_label("Color"))
     creator_color = OptionButton.new()
-    creator_color.custom_minimum_size = Vector2(0, 52)
+    creator_color.custom_minimum_size = Vector2(0, 50)
+    _style_option(creator_color)
     for option in COLORS:
         creator_color.add_item(String(option[0]))
-    box.add_child(creator_color)
+    color_box.add_child(creator_color)
+    row_one.add_child(color_box)
 
-    box.add_child(_label("Personality — changes what this slime naturally cares about"))
+    var personality_box := VBoxContainer.new()
+    personality_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    personality_box.add_child(_label("Personality"))
     creator_personality = OptionButton.new()
-    creator_personality.custom_minimum_size = Vector2(0, 52)
+    creator_personality.custom_minimum_size = Vector2(0, 50)
+    _style_option(creator_personality)
     for personality_name in PERSONALITIES:
         creator_personality.add_item(personality_name)
-    box.add_child(creator_personality)
+    personality_box.add_child(creator_personality)
+    row_one.add_child(personality_box)
 
-    box.add_child(_label("Habit 1 — recurring behavior preference"))
+    var habits_label := _label("Habits")
+    habits_label.add_theme_font_size_override("font_size", 18)
+    box.add_child(habits_label)
+
+    var habits_row := HBoxContainer.new()
+    habits_row.add_theme_constant_override("separation", 10)
+    box.add_child(habits_row)
+
     creator_habit_a = OptionButton.new()
-    creator_habit_a.custom_minimum_size = Vector2(0, 52)
+    creator_habit_a.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    creator_habit_a.custom_minimum_size = Vector2(0, 50)
+    _style_option(creator_habit_a)
+    creator_habit_b = OptionButton.new()
+    creator_habit_b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    creator_habit_b.custom_minimum_size = Vector2(0, 50)
+    _style_option(creator_habit_b)
     for habit_name in HABITS:
         creator_habit_a.add_item(habit_name)
-    box.add_child(creator_habit_a)
-
-    box.add_child(_label("Habit 2"))
-    creator_habit_b = OptionButton.new()
-    creator_habit_b.custom_minimum_size = Vector2(0, 52)
-    for habit_name in HABITS:
         creator_habit_b.add_item(habit_name)
-    box.add_child(creator_habit_b)
+    habits_row.add_child(creator_habit_a)
+    habits_row.add_child(creator_habit_b)
 
-    var hint := _label("Examples: Foodie + Snacky seeks food earlier. Playful + Toy Lover chooses play more often. Wanderer explores the house.")
+    var hint := _label("Foodie seeks meals sooner. Playful chooses toys. Neat cleans sooner. Bubbly socializes. Wanderer explores. Habits stack with personality.")
     hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    hint.add_theme_font_size_override("font_size", 15)
+    hint.add_theme_font_size_override("font_size", 14)
     box.add_child(hint)
-    creator_dialog.confirmed.connect(_confirm_creator)
+
+    var actions := HBoxContainer.new()
+    actions.alignment = BoxContainer.ALIGNMENT_END
+    actions.add_theme_constant_override("separation", 10)
+    box.add_child(actions)
+    actions.add_child(_button("CANCEL", _cancel_creator, Vector2(140, 58)))
+    actions.add_child(_button("CREATE", _confirm_creator, Vector2(190, 58)))
 
 func _build_baby_dialog() -> void:
-    baby_dialog = AcceptDialog.new()
-    baby_dialog.title = "Have a Baby Slime"
-    baby_dialog.ok_button_text = "Have Baby"
-    ui_layer.add_child(baby_dialog)
+    baby_overlay = ColorRect.new()
+    baby_overlay.name = "BabyOverlay"
+    baby_overlay.color = Color(0.03, 0.08, 0.10, 0.78)
+    baby_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+    baby_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+    baby_overlay.visible = false
+    ui_layer.add_child(baby_overlay)
+
+    baby_panel = PanelContainer.new()
+    baby_panel.set_anchors_preset(Control.PRESET_CENTER)
+    baby_panel.position = Vector2(-280, -210)
+    baby_panel.custom_minimum_size = Vector2(560, 420)
+    baby_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.84, 0.93, 0.90, 0.99), 32))
+    baby_overlay.add_child(baby_panel)
+
     var box := VBoxContainer.new()
-    box.custom_minimum_size = Vector2(360, 220)
-    baby_dialog.add_child(box)
-    box.add_child(_label("Parent 1"))
+    box.add_theme_constant_override("separation", 10)
+    baby_panel.add_child(box)
+
+    var header := HBoxContainer.new()
+    box.add_child(header)
+    var title := _label("HAVE A BABY SLIME")
+    title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    title.add_theme_font_size_override("font_size", 28)
+    header.add_child(title)
+    header.add_child(_button("✕", _cancel_baby, Vector2(58, 50)))
+
+    var parents_row := HBoxContainer.new()
+    parents_row.add_theme_constant_override("separation", 10)
+    box.add_child(parents_row)
+
+    var a_box := VBoxContainer.new()
+    a_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    a_box.add_child(_label("Parent 1"))
     parent_a = OptionButton.new()
-    box.add_child(parent_a)
-    box.add_child(_label("Parent 2"))
+    parent_a.custom_minimum_size = Vector2(0, 52)
+    _style_option(parent_a)
+    a_box.add_child(parent_a)
+    parents_row.add_child(a_box)
+
+    var b_box := VBoxContainer.new()
+    b_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    b_box.add_child(_label("Parent 2"))
     parent_b = OptionButton.new()
-    box.add_child(parent_b)
+    parent_b.custom_minimum_size = Vector2(0, 52)
+    _style_option(parent_b)
+    b_box.add_child(parent_b)
+    parents_row.add_child(b_box)
+
     box.add_child(_label("Baby name"))
     baby_name = LineEdit.new()
     baby_name.placeholder_text = "Bubble"
+    baby_name.custom_minimum_size = Vector2(0, 52)
+    _style_text_field(baby_name)
     box.add_child(baby_name)
-    baby_dialog.confirmed.connect(_confirm_baby)
+
+    var note := _label("The baby inherits a mix of the parents' color, personality, habits, and tendencies.")
+    note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    note.add_theme_font_size_override("font_size", 15)
+    box.add_child(note)
+
+    var actions := HBoxContainer.new()
+    actions.alignment = BoxContainer.ALIGNMENT_END
+    actions.add_theme_constant_override("separation", 10)
+    box.add_child(actions)
+    actions.add_child(_button("CANCEL", _cancel_baby, Vector2(140, 58)))
+    actions.add_child(_button("HAVE BABY", _confirm_baby, Vector2(190, 58)))
 
 func _show_start_screen() -> void:
     if root_ui:
@@ -539,7 +640,10 @@ func _open_creator() -> void:
     creator_personality.select(index % PERSONALITIES.size())
     creator_habit_a.select(index % HABITS.size())
     creator_habit_b.select((index + 3) % HABITS.size())
-    creator_dialog.popup_centered()
+    creator_overlay.visible = true
+
+func _cancel_creator() -> void:
+    creator_overlay.visible = false
 
 func _confirm_creator() -> void:
     var idx := maxi(creator_color.selected, 0)
@@ -560,6 +664,7 @@ func _confirm_creator() -> void:
         chosen_habits
     )
     household.select_slime(slime.slime_id)
+    creator_overlay.visible = false
     _status("%s joined the house — %s" % [slime.display_name, slime.profile_text()])
     save_game(false)
 
@@ -578,7 +683,10 @@ func _open_baby() -> void:
     parent_a.select(0)
     parent_b.select(1)
     baby_name.text = ""
-    baby_dialog.popup_centered()
+    baby_overlay.visible = true
+
+func _cancel_baby() -> void:
+    baby_overlay.visible = false
 
 func _confirm_baby() -> void:
     if parent_a.selected < 0 or parent_b.selected < 0:
@@ -591,6 +699,7 @@ func _confirm_baby() -> void:
     var baby := household.add_baby(a_id, b_id, baby_name.text)
     if baby:
         household.select_slime(baby.slime_id)
+        baby_overlay.visible = false
         _status("%s was born" % baby.display_name)
         save_game(false)
 
@@ -763,6 +872,21 @@ func _label(text_value: String) -> Label:
     label.text = text_value
     label.add_theme_color_override("font_color", Color("173039"))
     return label
+
+func _style_option(option: OptionButton) -> void:
+    option.add_theme_font_size_override("font_size", 18)
+    option.add_theme_color_override("font_color", Color("173039"))
+    option.add_theme_color_override("font_hover_color", Color("0f252d"))
+    option.add_theme_stylebox_override("normal", _panel_style(Color(0.91, 0.97, 0.96, 1.0), 14))
+    option.add_theme_stylebox_override("hover", _panel_style(Color(0.97, 1.0, 0.99, 1.0), 14))
+    option.add_theme_stylebox_override("pressed", _panel_style(Color(0.75, 0.88, 0.85, 1.0), 14))
+
+func _style_text_field(field: LineEdit) -> void:
+    field.add_theme_font_size_override("font_size", 19)
+    field.add_theme_color_override("font_color", Color("173039"))
+    field.add_theme_color_override("font_placeholder_color", Color(0.24, 0.38, 0.40, 0.65))
+    field.add_theme_stylebox_override("normal", _panel_style(Color(0.94, 0.98, 0.97, 1.0), 14))
+    field.add_theme_stylebox_override("focus", _panel_style(Color(1.0, 1.0, 1.0, 1.0), 14))
 
 func _panel_style(color: Color, radius: int) -> StyleBoxFlat:
     var style := StyleBoxFlat.new()
