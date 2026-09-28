@@ -2207,9 +2207,9 @@ func _button(text_value: String, callback: Callable, size := Vector2(90, 48)) ->
     button.add_theme_color_override("font_color", Color("173039"))
     button.add_theme_color_override("font_hover_color", Color("0f252d"))
     button.add_theme_color_override("font_pressed_color", Color("10262c"))
-    button.add_theme_stylebox_override("normal", _panel_style(Color(0.78, 0.90, 0.89, 0.98), 16))
-    button.add_theme_stylebox_override("hover", _panel_style(Color(0.86, 0.95, 0.93, 1.0), 16))
-    button.add_theme_stylebox_override("pressed", _panel_style(Color(0.58, 0.78, 0.75, 1.0), 16))
+    button.add_theme_stylebox_override("normal", _button_style(Color(0.78, 0.90, 0.89, 0.98)))
+    button.add_theme_stylebox_override("hover", _button_style(Color(0.86, 0.95, 0.93, 1.0)))
+    button.add_theme_stylebox_override("pressed", _button_style(Color(0.58, 0.78, 0.75, 1.0)))
     button.pressed.connect(callback)
     if audio_manager:
         button.pressed.connect(audio_manager.ui_click)
@@ -2235,6 +2235,24 @@ func _style_text_field(field: LineEdit) -> void:
     field.add_theme_color_override("font_placeholder_color", Color(0.24, 0.38, 0.40, 0.65))
     field.add_theme_stylebox_override("normal", _panel_style(Color(0.94, 0.98, 0.97, 1.0), 14))
     field.add_theme_stylebox_override("focus", _panel_style(Color(1.0, 1.0, 1.0, 1.0), 14))
+
+func _button_style(color: Color) -> StyleBoxFlat:
+    var style := StyleBoxFlat.new()
+    style.bg_color = color
+    style.corner_radius_top_left = 13
+    style.corner_radius_top_right = 20
+    style.corner_radius_bottom_left = 19
+    style.corner_radius_bottom_right = 11
+    style.border_width_left = 1
+    style.border_width_top = 1
+    style.border_width_right = 1
+    style.border_width_bottom = 1
+    style.border_color = Color(0.13, 0.27, 0.29, 0.32)
+    style.content_margin_left = 9
+    style.content_margin_right = 9
+    style.content_margin_top = 5
+    style.content_margin_bottom = 5
+    return style
 
 func _puddle_style(color: Color) -> StyleBoxFlat:
     var style := StyleBoxFlat.new()
