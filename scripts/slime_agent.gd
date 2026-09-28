@@ -2,6 +2,7 @@ class_name SlimeAgent
 extends CharacterBody3D
 
 signal data_changed
+signal event_message(text: String)
 
 const MODEL_PATH := "res://assets/models/nim_slime_current.glb"
 const NEED_MAX := 100.0
@@ -1274,6 +1275,7 @@ func _perform_action(delta: float) -> void:
                 add_inventory_item("Finished %s" % project_name, 1)
                 satisfaction += 55
                 add_moodlet("Finished a Project", String(info.get("emotion", "Focused")), 10.0, 24.0)
+                event_message.emit("%s finished %s" % [display_name, project_name])
                 project_progress = 0.0
                 project_name = "%s Project" % favorite_hobby
                 _record_habit_action("fun")
@@ -1325,6 +1327,7 @@ func _tick_life_stage() -> void:
     age_seconds = 0.0
     add_moodlet("Growing Up", "Happy", 18.0, 32.0)
     current_activity = "Grew from %s to %s" % [old_stage, age_stage]
+    event_message.emit("%s grew into a %s" % [display_name, age_stage.replace("_", " ").capitalize()])
     _apply_age_scale()
     data_changed.emit()
 
@@ -1427,6 +1430,7 @@ func gain_skill(skill: String, amount: float) -> void:
         data["level"] = level
         satisfaction += 25
         add_moodlet("Learned %s %d" % [skill.capitalize(), level], "Focused", 7.0, 18.0)
+        event_message.emit("%s reached %s %d" % [display_name, skill.capitalize(), level])
         needed = 18.0 + float(level) * 14.0
     skills[skill] = data
 
