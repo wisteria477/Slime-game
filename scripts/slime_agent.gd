@@ -101,6 +101,7 @@ var base_visual_scale := Vector3.ONE
 var idle_phase := 0.0
 var face_base_scales: Dictionary = {}
 var face_base_rotations: Dictionary = {}
+var is_selected_visual := false
 
 func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref, personality_value := "Bubbly", habits_value: Array[String] = [], appearance_value: Dictionary = {}) -> void:
     slime_id = id_value
@@ -145,6 +146,7 @@ func tick_sim(delta: float) -> void:
     _tick_wants(delta)
     _decay_needs(delta)
     _update_emotion()
+    _refresh_thought_bubble()
     if not action_kind.is_empty() and path.is_empty():
         _perform_action(delta)
         return
@@ -246,13 +248,62 @@ func action_progress() -> float:
 
 
 func set_selected(selected: bool) -> void:
+    is_selected_visual = selected
     if selection_disc:
         selection_disc.visible = selected
+    _refresh_thought_bubble()
 
 func current_cell() -> Vector2i:
     if build_system == null:
         return Vector2i.ZERO
     return build_system.world_to_cell(global_position)
+
+func _action_icon(action: String) -> String:
+    return {
+        "cook":"🍳",
+        "eat":"🍴",
+        "sleep":"💤",
+        "bathe":"🛁",
+        "wash_up":"💧",
+        "bathroom":"🚽",
+        "hobby":"✨",
+        "social":"💬",
+        "relax":"☁",
+        "clean_object":"🧽",
+        "repair_object":"🔧",
+        "care_baby":"♥",
+    }.get(action, "•")
+
+func _critical_need_icon() -> String:
+    var critical := _critical_need()
+    return {
+        "hunger":"🍴",
+        "energy":"💤",
+        "hygiene":"🛁",
+        "bladder":"🚽",
+    }.get(critical, "")
+
+func _refresh_thought_bubble() -> void:
+    if state_label == null:
+        return
+    var critical_icon := _critical_need_icon()
+    var should_show := is_selected_visual or not critical_icon.is_empty() or engrossed
+    state_label.visible = should_show
+    if not should_show:
+        state_label.text = ""
+        return
+    if not action_kind.is_empty():
+        var label := _action_label(action_kind)
+        var percent := int(action_progress() * 100.0)
+        state_label.text = "%s %s %d%%" % [_action_icon(action_kind), label, percent]
+        if engrossed:
+            state_label.text += "  ✦"
+    elif not critical_icon.is_empty():
+        state_label.text = "%s !" % critical_icon
+    elif engrossed:
+        state_label.text = "✦ In the Zone"
+    else:
+        state_label.text = emotion
 
 func serialize() -> Dictionary:
     return {
