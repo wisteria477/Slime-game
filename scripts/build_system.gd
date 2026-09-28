@@ -6,7 +6,7 @@ signal changed
 const GRID_SIZE := Vector2i(12, 10)
 const CELL_SIZE := 1.35
 const WALL_HEIGHT := 1.75
-const FURNITURE_TYPES := ["bed", "food", "bath", "toy", "sofa", "toilet", "sink", "stove", "fridge", "table", "lamp", "bookshelf", "desk", "plant", "rug", "dresser", "workbench"]
+const FURNITURE_TYPES := ["bed", "food", "bath", "toy", "sofa", "toilet", "sink", "stove", "fridge", "table", "lamp", "bookshelf", "desk", "plant", "rug", "dresser", "workbench", "counter", "chair", "shower", "mirror", "wall_art"]
 const TOOL_COSTS := {
     "floor": 8,
     "wall": 12,
@@ -33,6 +33,11 @@ const TOOL_COSTS := {
     "rug": 40,
     "dresser": 120,
     "workbench": 260,
+    "counter": 95,
+    "chair": 55,
+    "shower": 175,
+    "mirror": 45,
+    "wall_art": 35,
 }
 const TOOL_REFUNDS := {
     "floor": 4,
@@ -117,6 +122,14 @@ func make_starter_home() -> void:
     _place_furniture(Vector2i(4, 6), "bookshelf")
     _place_furniture(Vector2i(3, 6), "desk")
     _place_furniture(Vector2i(3, 5), "workbench")
+    _place_furniture(Vector2i(5, 2), "counter")
+    _place_furniture(Vector2i(5, 5), "table")
+    _place_furniture(Vector2i(5, 4), "chair")
+    _place_furniture(Vector2i(9, 3), "shower")
+    _place_furniture(Vector2i(7, 4), "mirror")
+    _place_furniture(Vector2i(8, 6), "plant")
+    _place_furniture(Vector2i(7, 6), "lamp")
+    _place_furniture(Vector2i(8, 5), "rug")
     set_cutaway_visible(true)
     changed.emit()
 
@@ -313,14 +326,14 @@ func interaction_options_for_type(kind: String) -> Array[Dictionary]:
             return [{"label":"Grab Food", "action":"eat"}]
         "toilet":
             return [{"label":"Use Bathroom", "action":"bathroom"}]
-        "bath":
-            return [{"label":"Take Bath", "action":"bathe"}]
-        "sink":
+        "bath", "shower":
+            return [{"label":"Bathe", "action":"bathe"}]
+        "sink", "mirror":
             return [
                 {"label":"Wash Up", "action":"wash_up"},
                 {"label":"Clean Sink", "action":"clean_object"},
             ]
-        "sofa":
+        "sofa", "chair":
             return [{"label":"Relax", "action":"relax"}]
         "toy":
             return [{"label":"Play / Hobby", "action":"hobby"}]
@@ -611,57 +624,116 @@ func _place_furniture(cell: Vector2i, kind: String) -> void:
 func _make_furniture_visual(root: Node3D, kind: String) -> void:
     match kind:
         "bed":
-            _box(root, Vector3(1.05, 0.28, 1.15), Vector3(0, 0.19, 0), Color("8f76ad"))
-            _box(root, Vector3(1.0, 0.12, 0.30), Vector3(0, 0.39, -0.37), Color("e8ded3"))
+            _box(root, Vector3(1.12, 0.22, 1.18), Vector3(0, 0.15, 0), Color("675244"))
+            _box(root, Vector3(1.04, 0.24, 1.08), Vector3(0, 0.31, 0), Color("e7dfd5"))
+            _box(root, Vector3(1.00, 0.10, 0.52), Vector3(0, 0.46, 0.25), Color("8f76ad"))
+            _box(root, Vector3(0.42, 0.12, 0.28), Vector3(0, 0.51, -0.34), Color("f3eee7"))
+            _box(root, Vector3(1.08, 0.72, 0.10), Vector3(0, 0.56, 0.54), Color("66503f"))
         "food":
             _box(root, Vector3(0.86, 1.05, 0.86), Vector3(0, 0.53, 0), Color("547a62"))
             _box(root, Vector3(0.72, 0.07, 0.72), Vector3(0, 1.08, 0), Color("b8ccb8"))
+            _sphere(root, 0.12, Vector3(-0.18, 1.19, -0.04), Color("e7b354"))
+            _sphere(root, 0.11, Vector3(0.12, 1.18, 0.08), Color("cf6f68"))
         "bath":
-            _box(root, Vector3(1.08, 0.48, 0.92), Vector3(0, 0.25, 0), Color("79aeb7"))
+            _box(root, Vector3(1.16, 0.48, 0.96), Vector3(0, 0.25, 0), Color("d5e2df"))
+            _box(root, Vector3(0.94, 0.18, 0.74), Vector3(0, 0.42, 0), Color("76b9c6"))
+            _box(root, Vector3(0.08, 0.38, 0.08), Vector3(0.42, 0.67, 0.26), Color("76898a"))
         "toy":
             _sphere(root, 0.34, Vector3(-0.18, 0.34, 0), Color("d75f82"))
             _sphere(root, 0.28, Vector3(0.22, 0.28, 0.12), Color("d69b43"))
+            _box(root, Vector3(0.38, 0.14, 0.38), Vector3(0.08, 0.12, -0.24), Color("72a8b0"))
         "sofa":
-            _box(root, Vector3(1.12, 0.44, 0.82), Vector3(0, 0.24, 0), Color("527754"))
-            _box(root, Vector3(1.10, 0.52, 0.20), Vector3(0, 0.64, 0.30), Color("456846"))
+            _box(root, Vector3(1.22, 0.36, 0.78), Vector3(0, 0.23, 0), Color("527754"))
+            _box(root, Vector3(1.18, 0.56, 0.18), Vector3(0, 0.60, 0.30), Color("456846"))
+            _box(root, Vector3(0.18, 0.48, 0.78), Vector3(-0.58, 0.40, 0), Color("456846"))
+            _box(root, Vector3(0.18, 0.48, 0.78), Vector3(0.58, 0.40, 0), Color("456846"))
+            _box(root, Vector3(0.48, 0.12, 0.48), Vector3(-0.27, 0.45, -0.05), Color("5f865f"))
+            _box(root, Vector3(0.48, 0.12, 0.48), Vector3(0.27, 0.45, -0.05), Color("5f865f"))
         "toilet":
-            _box(root, Vector3(0.62, 0.42, 0.72), Vector3(0, 0.22, 0.08), Color("dce8e7"))
-            _box(root, Vector3(0.58, 0.62, 0.22), Vector3(0, 0.56, 0.30), Color("c9d9d8"))
+            _box(root, Vector3(0.56, 0.42, 0.66), Vector3(0, 0.22, 0.05), Color("e1e9e7"))
+            _box(root, Vector3(0.58, 0.60, 0.22), Vector3(0, 0.56, 0.30), Color("c9d9d8"))
+            _box(root, Vector3(0.52, 0.08, 0.52), Vector3(0, 0.47, -0.02), Color("f4f7f6"))
         "sink":
-            _box(root, Vector3(0.82, 0.74, 0.58), Vector3(0, 0.38, 0), Color("8fa9a5"))
-            _box(root, Vector3(0.74, 0.12, 0.54), Vector3(0, 0.80, 0), Color("dce8e7"))
+            _box(root, Vector3(0.82, 0.70, 0.56), Vector3(0, 0.36, 0), Color("8fa9a5"))
+            _box(root, Vector3(0.76, 0.12, 0.58), Vector3(0, 0.78, 0), Color("e3ecea"))
+            _box(root, Vector3(0.08, 0.28, 0.08), Vector3(0, 0.97, 0.10), Color("6c7a7b"))
+            _box(root, Vector3(0.28, 0.06, 0.08), Vector3(0, 1.08, 0.10), Color("6c7a7b"))
         "stove":
             _box(root, Vector3(0.90, 0.86, 0.76), Vector3(0, 0.45, 0), Color("5f686c"))
-            _box(root, Vector3(0.76, 0.06, 0.64), Vector3(0, 0.91, 0), Color("272c2f"))
+            _box(root, Vector3(0.78, 0.06, 0.66), Vector3(0, 0.91, 0), Color("272c2f"))
+            for x in [-0.22, 0.22]:
+                for z in [-0.17, 0.17]:
+                    _sphere(root, 0.10, Vector3(x, 0.96, z), Color("1f2426"))
+            for x in [-0.23, 0.0, 0.23]:
+                _sphere(root, 0.045, Vector3(x, 0.72, -0.39), Color("b8b8b2"))
         "fridge":
-            _box(root, Vector3(0.82, 1.42, 0.78), Vector3(0, 0.72, 0), Color("b8c8c6"))
-            _box(root, Vector3(0.04, 0.42, 0.04), Vector3(0.30, 0.85, -0.40), Color("4d595a"))
+            _box(root, Vector3(0.84, 1.44, 0.80), Vector3(0, 0.72, 0), Color("b8c8c6"))
+            _box(root, Vector3(0.76, 0.04, 0.82), Vector3(0, 0.87, -0.405), Color("91a5a4"))
+            _box(root, Vector3(0.04, 0.38, 0.04), Vector3(0.29, 1.05, -0.43), Color("4d595a"))
+            _box(root, Vector3(0.04, 0.28, 0.04), Vector3(0.29, 0.46, -0.43), Color("4d595a"))
         "table":
             _box(root, Vector3(1.10, 0.12, 0.90), Vector3(0, 0.66, 0), Color("8a6a50"))
-            _box(root, Vector3(0.12, 0.62, 0.12), Vector3(-0.42, 0.32, -0.32), Color("6b513f"))
-            _box(root, Vector3(0.12, 0.62, 0.12), Vector3(0.42, 0.32, 0.32), Color("6b513f"))
+            for x in [-0.42, 0.42]:
+                for z in [-0.32, 0.32]:
+                    _box(root, Vector3(0.10, 0.62, 0.10), Vector3(x, 0.32, z), Color("6b513f"))
+        "chair":
+            _box(root, Vector3(0.55, 0.10, 0.55), Vector3(0, 0.48, 0), Color("8a6a50"))
+            _box(root, Vector3(0.55, 0.60, 0.10), Vector3(0, 0.76, 0.24), Color("725744"))
+            for x in [-0.20, 0.20]:
+                _box(root, Vector3(0.08, 0.46, 0.08), Vector3(x, 0.24, 0), Color("654c3b"))
         "lamp":
-            _box(root, Vector3(0.18, 0.86, 0.18), Vector3(0, 0.44, 0), Color("5a4d42"))
-            _sphere(root, 0.30, Vector3(0, 0.98, 0), Color("ffd98a"))
+            _box(root, Vector3(0.16, 0.86, 0.16), Vector3(0, 0.44, 0), Color("5a4d42"))
+            _sphere(root, 0.31, Vector3(0, 0.98, 0), Color("ffd98a"))
+            var light := OmniLight3D.new()
+            light.position = Vector3(0, 1.0, 0)
+            light.light_color = Color("ffdca0")
+            light.light_energy = 0.75
+            light.omni_range = 3.6
+            light.shadow_enabled = false
+            root.add_child(light)
         "bookshelf":
-            _box(root, Vector3(1.02, 1.18, 0.30), Vector3(0, 0.60, 0), Color("66503f"))
-            _box(root, Vector3(0.84, 0.10, 0.34), Vector3(0, 0.42, -0.02), Color("d39b66"))
-            _box(root, Vector3(0.84, 0.10, 0.34), Vector3(0, 0.78, -0.02), Color("7894b4"))
+            _box(root, Vector3(1.04, 1.20, 0.32), Vector3(0, 0.60, 0), Color("66503f"))
+            for y in [0.28, 0.56, 0.84]:
+                _box(root, Vector3(0.90, 0.07, 0.36), Vector3(0, y, -0.02), Color("4f3e32"))
+            for x in [-0.30, -0.10, 0.12, 0.31]:
+                _box(root, Vector3(0.10, 0.26, 0.20), Vector3(x, 0.44, -0.18), Color("7894b4") if x < 0 else Color("d39b66"))
         "desk":
             _box(root, Vector3(1.10, 0.12, 0.62), Vector3(0, 0.70, 0), Color("81624a"))
             _box(root, Vector3(0.14, 0.66, 0.14), Vector3(-0.43, 0.34, 0.20), Color("66503f"))
             _box(root, Vector3(0.14, 0.66, 0.14), Vector3(0.43, 0.34, 0.20), Color("66503f"))
+            _box(root, Vector3(0.34, 0.20, 0.42), Vector3(0.32, 0.56, 0), Color("6b513f"))
+        "counter":
+            _box(root, Vector3(1.05, 0.84, 0.66), Vector3(0, 0.43, 0), Color("7f8d85"))
+            _box(root, Vector3(1.10, 0.10, 0.72), Vector3(0, 0.90, 0), Color("d7d0c3"))
+            _box(root, Vector3(0.03, 0.46, 0.03), Vector3(0, 0.48, -0.35), Color("4e5854"))
+        "shower":
+            _box(root, Vector3(0.92, 0.08, 0.92), Vector3(0, 0.05, 0), Color("d9e7e5"))
+            _box(root, Vector3(0.06, 1.54, 0.92), Vector3(0.43, 0.80, 0), Color("73aab2"))
+            _box(root, Vector3(0.92, 1.54, 0.05), Vector3(0, 0.80, 0.43), Color("8cc3ca"))
+            _sphere(root, 0.10, Vector3(0.25, 1.40, 0.28), Color("697b7c"))
+        "mirror":
+            _box(root, Vector3(0.72, 0.92, 0.06), Vector3(0, 0.92, 0.28), Color("9cc7cb"))
+            _box(root, Vector3(0.82, 1.02, 0.04), Vector3(0, 0.92, 0.31), Color("66503f"))
         "plant":
             _box(root, Vector3(0.42, 0.30, 0.42), Vector3(0, 0.16, 0), Color("9c6c4f"))
             _sphere(root, 0.34, Vector3(0, 0.62, 0), Color("4f8059"))
+            _sphere(root, 0.24, Vector3(0.20, 0.78, 0.06), Color("629763"))
+            _sphere(root, 0.22, Vector3(-0.20, 0.76, -0.04), Color("5b8e5d"))
         "rug":
             _box(root, Vector3(1.18, 0.035, 1.02), Vector3(0, 0.04, 0), Color("a86d80"))
+            _box(root, Vector3(0.88, 0.038, 0.72), Vector3(0, 0.044, 0), Color("c08b9e"))
         "dresser":
             _box(root, Vector3(1.02, 0.88, 0.48), Vector3(0, 0.45, 0), Color("795a43"))
+            for y in [0.25, 0.48, 0.71]:
+                _box(root, Vector3(0.88, 0.05, 0.05), Vector3(0, y, -0.25), Color("5d4535"))
         "workbench":
             _box(root, Vector3(1.16, 0.14, 0.66), Vector3(0, 0.72, 0), Color("72563f"))
             _box(root, Vector3(0.18, 0.70, 0.18), Vector3(-0.42, 0.36, 0.20), Color("55504a"))
             _box(root, Vector3(0.18, 0.70, 0.18), Vector3(0.42, 0.36, 0.20), Color("55504a"))
+            _box(root, Vector3(0.50, 0.08, 0.20), Vector3(0.16, 0.84, 0), Color("87969a"))
+        "wall_art":
+            _box(root, Vector3(0.74, 0.62, 0.05), Vector3(0, 1.02, 0.30), Color("725744"))
+            _box(root, Vector3(0.62, 0.50, 0.03), Vector3(0, 1.02, 0.27), Color("d9a66f"))
 
 func _box(root: Node3D, size: Vector3, position: Vector3, color: Color) -> void:
     var m := MeshInstance3D.new()
