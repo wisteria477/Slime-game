@@ -38,6 +38,7 @@ var life_button: Button
 var life_overlay: ColorRect
 var life_panel: PanelContainer
 var life_text: RichTextLabel
+var life_section := "Overview"
 var career_cycle_button: Button
 var social_target: OptionButton
 var social_action: OptionButton
@@ -531,6 +532,13 @@ func _build_life_panel() -> void:
     header.add_child(title)
     header.add_child(_button("✕", _close_life_panel, Vector2(58, 50)))
 
+    var section_row := HBoxContainer.new()
+    section_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    section_row.add_theme_constant_override("separation", 6)
+    box.add_child(section_row)
+    for section_name in ["Overview", "Social", "Growth", "Household"]:
+        section_row.add_child(_button(section_name, _set_life_section.bind(section_name), Vector2(132, 46)))
+
     life_text = RichTextLabel.new()
     life_text.bbcode_enabled = true
     life_text.fit_content = false
@@ -611,6 +619,10 @@ func _populate_social_targets() -> void:
         social_target.add_item(slime.display_name)
         social_target.set_item_metadata(social_target.item_count - 1, slime.slime_id)
 
+func _set_life_section(section_name: String) -> void:
+    life_section = section_name
+    _refresh_life_panel()
+
 func _refresh_life_panel() -> void:
     if life_text == null or not life_overlay.visible:
         return
@@ -618,30 +630,34 @@ func _refresh_life_panel() -> void:
     if slime == null:
         life_text.text = "No slime selected."
         return
-    var skill_parts: Array[String] = []
-    for skill in SlimeLifeRules.SKILLS:
-        skill_parts.append("%s %d" % [skill.capitalize(), slime.skill_level(skill)])
+
+    match life_section:
+        "Social":
+            life_text.text = _social_panel_text(slime)
+        "Growth":
+            life_text.text = _growth_panel_text(slime)
+        "Household":
+            life_text.text = _household_panel_text(slime)
+        _:
+            life_text.text = _overview_panel_text(slime)
+
+func _overview_panel_text(slime: SlimeAgent) -> String:
     var want_parts: Array[String] = []
     for want in slime.wants:
         want_parts.append("• " + String(want.get("text", "")))
+    if want_parts.is_empty():
+        want_parts.append("• No active wants")
     var fear_parts: Array[String] = []
     for fear in slime.fears:
         fear_parts.append("• " + String(fear.get("text", "")))
+    if fear_parts.is_empty():
+        fear_parts.append("• No active fears")
     var mood_parts: Array[String] = []
     for mood in slime.moodlets:
-        mood_parts.append("• %s (%s)" % [String(mood.get("text", "")), String(mood.get("emotion", ""))])
-    var relation_parts: Array[String] = []
-    for other in household.all_present_slimes():
-        if other == slime:
-            continue
-        relation_parts.append("• %s — %s (%d)" % [
-            other.display_name,
-            household.relationship_label(slime, other),
-            int(slime.relationships.get(other.slime_id, 0.0))
-        ])
-    if relation_parts.is_empty():
-        relation_parts.append("• No relationships yet")
-    life_text.text = "[b]%s[/b] · %s · [b]%s[/b]\n%s\n\n[b]Emotion[/b]  %s\n[b]Doing[/b]  %s\n[b]Queue[/b]  %s\n\n[b]Aspiration[/b]  %s\n[b]Wants[/b]\n%s\n[b]Fears[/b]\n%s\n\n[b]Career[/b]  %s\n[b]Satisfaction[/b]  %d\n[b]Skills[/b]  %s\n\n[b]Relationships[/b]\n%s\n\n[b]Household[/b]  %d puddle coins · Bills %d · Home value %d · Rooms %d · Lot %s\n[b]Achievements[/b]  %d" % [
+        mood_parts.append("• %s — %s" % [String(mood.get("text", "")), String(mood.get("emotion", ""))])
+    if mood_parts.is_empty():
+        mood_parts.append("• No strong moodlets")
+    return "[b]%s[/b] · %s · %s\n%s\n\n[b]Emotion[/b]  %s\n[b]Doing[/b]  %s\n[b]Queue[/b]  %s\n[b]Life state[/b]  %s\n\n[b]Aspiration[/b]  %s\n[b]Wants[/b]\n%s\n\n[b]Fears[/b]\n%s\n\n[b]Moodlets[/b]\n%s" % [
         slime.display_name,
         slime.age_stage.capitalize(),
         slime.profile_text(),
@@ -649,33 +665,72 @@ func _refresh_life_panel() -> void:
         slime.emotion,
         slime.activity_text(),
         slime.queue_text(),
+        slime.life_state.capitalize(),
         slime.aspiration,
         "\n".join(want_parts),
         "\n".join(fear_parts),
-        slime.career_text(),
-        slime.satisfaction,
-        " · ".join(skill_parts),
-        "\n".join(relation_parts),
-        household.funds,
-        household.bills_due,
-        build_system.home_value(),
-        build_system.room_count(),
-        household.current_lot,
-        household.achievements.size(),
+        "\n".join(mood_parts),
     ]
-    life_text.text += "\n[b]Life state[/b]  %s · Mortality %s\n[b]Family[/b]  %s\n[b]Inventory[/b]  %s\n[b]Inactive households[/b]  %d" % [
-        slime.life_state.capitalize(),
-        "ON" if household.mortality_enabled else "OFF",
+
+func _social_panel_text(slime: SlimeAgent) -> String:
+    var relation_parts: Array[String] = []
+    for other in household.all_present_slimes():
+        if other == slime:
+            continue
+        relation_parts.append("• %s — %s · Friendship %d" % [
+            other.display_name,
+            household.relationship_label(slime, other),
+            int(slime.relationships.get(other.slime_id, 0.0))
+        ])
+    if relation_parts.is_empty():
+        relation_parts.append("• No relationships yet")
+    var text := "[b]Family[/b]\n%s\n\n[b]Relationships[/b]\n%s" % [
         household.family_tree_text(slime),
-        JSON.stringify(slime.inventory),
-        household.inactive_households.size(),
+        "\n".join(relation_parts),
     ]
     if not household.event_name.is_empty():
-        life_text.text += "\n\n[b]Event[/b]  %s · %ds left · score %d" % [
+        text += "\n\n[b]Current event[/b]  %s · %ds left · score %d" % [
             household.event_name,
             int(household.event_timer),
             int(household.event_score),
         ]
+    return text
+
+func _growth_panel_text(slime: SlimeAgent) -> String:
+    var skill_parts: Array[String] = []
+    for skill in SlimeLifeRules.SKILLS:
+        skill_parts.append("• %s — Level %d" % [skill.capitalize(), slime.skill_level(skill)])
+    var reward_text := "None" if slime.reward_traits.is_empty() else ", ".join(slime.reward_traits)
+    var school_text := "Not in school"
+    if slime.age_stage in ["child", "teen"]:
+        school_text = "Grade %d" % int(slime.school_grade)
+    return "[b]Career[/b]  %s\n[b]School[/b]  %s\n[b]Satisfaction[/b]  %d\n[b]Rewards[/b]  %s\n\n[b]Skills[/b]\n%s\n\n[b]Achievements unlocked[/b]  %d" % [
+        slime.career_text(),
+        school_text,
+        slime.satisfaction,
+        reward_text,
+        "\n".join(skill_parts),
+        household.achievements.size(),
+    ]
+
+func _household_panel_text(slime: SlimeAgent) -> String:
+    var inventory_text := "Empty"
+    if not slime.inventory.is_empty():
+        var item_parts: Array[String] = []
+        for item in slime.inventory:
+            item_parts.append("%s ×%d" % [String(item.get("name", "Item")), int(item.get("quantity", 1))])
+        inventory_text = ", ".join(item_parts)
+    return "[b]Puddle coins[/b]  %d\n[b]Bills due[/b]  %d\n[b]Current lot[/b]  %s\n[b]Home value[/b]  %d\n[b]Detected rooms[/b]  %d\n[b]Mortality[/b]  %s\n[b]Inactive households[/b]  %d\n\n[b]%s's inventory[/b]\n%s\n\nBuild/Buy, travel, sharing, cheats, bills and household controls are below." % [
+        household.funds,
+        household.bills_due,
+        household.current_lot,
+        build_system.home_value(),
+        build_system.room_count(),
+        "ON" if household.mortality_enabled else "OFF",
+        household.inactive_households.size(),
+        slime.display_name,
+        inventory_text,
+    ]
 
 func _cycle_career() -> void:
     var slime := household.selected_slime()
