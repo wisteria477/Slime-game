@@ -299,7 +299,7 @@ func _seek_need(key: String) -> void:
     }.get(key, "")
     if String(furniture_kind).is_empty():
         return
-    var target := build_system.find_furniture(String(furniture_kind), current_cell())
+    var target: Dictionary = build_system.find_furniture(furniture_kind, current_cell())
     if target.is_empty():
         return
     action_kind = key
