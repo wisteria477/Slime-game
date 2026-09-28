@@ -30,7 +30,7 @@ var needs_profile: Label
 var build_button: Button
 var baby_button: Button
 var build_tray: PanelContainer
-var build_row: HBoxContainer
+var build_row: GridContainer
 var status_label: Label
 var money_label: Label
 var life_button: Button
@@ -332,7 +332,7 @@ func _apply_responsive_layout() -> void:
 
     build_tray.offset_left = 24
     build_tray.offset_right = -24
-    build_tray.offset_top = -132 if portrait else -108
+    build_tray.offset_top = -310 if portrait else -250
     build_tray.offset_bottom = -24
 
     status_label.offset_top = 116 if portrait else 24
@@ -432,14 +432,34 @@ func _build_ui() -> void:
     build_tray.add_theme_stylebox_override("panel", _panel_style(Color(0.43, 0.66, 0.61, 0.98), 26))
     build_tray.mouse_filter = Control.MOUSE_FILTER_STOP
     root_ui.add_child(build_tray)
-    build_row = HBoxContainer.new()
-    build_row.alignment = BoxContainer.ALIGNMENT_CENTER
-    build_row.add_theme_constant_override("separation", 5)
-    build_tray.add_child(build_row)
-    for tool in ["floor", "wall", "door", "bed", "food", "bath", "toy", "sofa", "erase"]:
-        build_row.add_child(_button(tool.capitalize(), _choose_tool.bind(tool), Vector2(74, 50)))
-    build_row.add_child(_button("Rotate", _rotate_wall, Vector2(74, 50)))
-    build_row.add_child(_button("Done", _toggle_build, Vector2(74, 50)))
+    var build_box := VBoxContainer.new()
+    build_box.add_theme_constant_override("separation", 6)
+    build_tray.add_child(build_box)
+    var build_header := HBoxContainer.new()
+    build_box.add_child(build_header)
+    var build_title := _label("BUILD / BUY")
+    build_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    build_title.add_theme_font_size_override("font_size", 20)
+    build_header.add_child(build_title)
+    build_header.add_child(_button("Rotate", _rotate_wall, Vector2(88, 46)))
+    build_header.add_child(_button("Level", _cycle_build_level, Vector2(88, 46)))
+    build_header.add_child(_button("Done", _toggle_build, Vector2(88, 46)))
+
+    var build_scroll := ScrollContainer.new()
+    build_scroll.custom_minimum_size = Vector2(0, 210)
+    build_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    build_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+    build_box.add_child(build_scroll)
+
+    build_row = GridContainer.new()
+    build_row.columns = 4
+    build_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    build_row.add_theme_constant_override("h_separation", 6)
+    build_row.add_theme_constant_override("v_separation", 6)
+    build_scroll.add_child(build_row)
+    for tool in ["floor", "wall", "door", "window", "bed", "food", "bath", "toy", "sofa", "toilet", "sink", "stove", "fridge", "table", "lamp", "bookshelf", "desk", "plant", "rug", "dresser", "workbench", "stairs", "platform", "roof", "erase"]:
+        var tool_button := _button(tool.capitalize(), _choose_tool.bind(tool), Vector2(112, 48))
+        build_row.add_child(tool_button)
     build_tray.visible = false
 
     status_label = Label.new()
@@ -636,9 +656,30 @@ func _buy_fast_learner() -> void:
 
 func _travel_next() -> void:
     var lots := ["Home", "Puddle Park", "Mossy Cafe", "Community Workshop"]
+    household.lot_builds[household.current_lot] = build_system.serialize()
     var index := lots.find(household.current_lot)
-    household.current_lot = lots[(index + 1) % lots.size()]
-    for slime in household.slimes:
+    var next_lot := lots[(index + 1) % lots.size()]
+    household.current_lot = next_lot
+
+    if household.lot_builds.has(next_lot):
+        build_system.deserialize(household.lot_builds[next_lot])
+    else:
+        match next_lot:
+            "Puddle Park":
+                build_system.make_park()
+            "Mossy Cafe":
+                build_system.make_cafe()
+            "Community Workshop":
+                build_system.make_workshop()
+            _:
+                build_system.make_starter_home()
+        household.lot_builds[next_lot] = build_system.serialize()
+
+    for i in range(household.slimes.size()):
+        var slime := household.slimes[i]
+        var spawn := build_system.find_spawn_cell(Vector2i(4 + (i % 3), 5))
+        slime.global_position = build_system.cell_to_world(spawn) + Vector3(0, 0.02, 0)
+        slime.path.clear()
         slime.add_moodlet("Visited %s" % household.current_lot, "Happy", 4.0, 16.0)
     _status("Travelled to %s" % household.current_lot)
     _refresh_life_panel()
@@ -968,7 +1009,18 @@ func _choose_tool(tool: String) -> void:
 
 func _rotate_wall() -> void:
     wall_orientation = "W" if wall_orientation == "N" else "N"
-    _status("Wall direction: %s" % ("vertical" if wall_orientation == "W" else "horizontal"))
+    _status("Placement direction: %s" % ("vertical" if wall_orientation == "W" else "horizontal"))
+
+func _cycle_build_level() -> void:
+    var level := build_system.cycle_build_level()
+    var label := "Ground"
+    if level == -1:
+        label = "Basement"
+    elif level == 1:
+        label = "Upper 1"
+    elif level == 2:
+        label = "Upper 2"
+    _status("Build level: %s" % label)
 
 func _cycle_speed() -> void:
     if sim_speed == 0.0:
