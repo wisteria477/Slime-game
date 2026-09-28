@@ -72,6 +72,7 @@ var sim_speed := 1.0
 var world_minutes := 8.0 * 60.0
 var world_day := 1
 var autosave_timer := 0.0
+var status_timer := 0.0
 var current_save_slot := 1
 var sun: DirectionalLight3D
 var touches: Dictionary = {}
@@ -134,6 +135,7 @@ func _process(delta: float) -> void:
     _refresh_needs_values()
     _refresh_money()
     _refresh_life_panel()
+    _tick_status(delta)
 
 func _notification(what: int) -> void:
     if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_APPLICATION_PAUSED:
@@ -1614,6 +1616,21 @@ func _panel_style(color: Color, radius: int) -> StyleBoxFlat:
     style.content_margin_bottom = 7
     return style
 
+func _tick_status(delta: float) -> void:
+    if status_label == null:
+        return
+    if status_timer > 0.0:
+        status_timer = maxf(0.0, status_timer - delta)
+        var alpha := 1.0
+        if status_timer < 1.0:
+            alpha = status_timer
+        status_label.modulate.a = alpha
+    elif not status_label.text.is_empty():
+        status_label.text = ""
+        status_label.modulate.a = 1.0
+
 func _status(text_value: String) -> void:
     if status_label:
         status_label.text = text_value
+        status_label.modulate.a = 1.0
+        status_timer = 3.0
