@@ -372,7 +372,7 @@ func _choose_next_goal() -> void:
 
 func _seek_need(key: String) -> void:
     if key == "social":
-        var other = household.find_nearest_other(slime_id, global_position)
+        var other: SlimeAgent = household.find_nearest_other(slime_id, global_position)
         if other:
             target_slime_id = other.slime_id
             action_kind = "social"
@@ -431,12 +431,12 @@ func _move_along_path() -> void:
 func _perform_action(delta: float) -> void:
     action_timer += delta
     if action_kind == "social":
-        var other = household.get_slime(target_slime_id)
+        var other: SlimeAgent = household.get_slime(target_slime_id)
         if other:
             if global_position.distance_to(other.global_position) > 2.0:
                 _set_path_to(other.current_cell())
                 return
-            var face_delta := other.global_position - global_position
+            var face_delta: Vector3 = other.global_position - global_position
             face_delta.y = 0.0
             if face_delta.length() > 0.05:
                 rotation.y = lerp_angle(rotation.y, atan2(face_delta.x, face_delta.z) + PI, 0.15)
