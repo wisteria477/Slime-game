@@ -6,6 +6,10 @@ var yaw := -45.0
 var pitch := -48.0
 var ortho_size := 13.8
 var target := Vector3(6.7, 0.0, 5.4)
+var home_target := Vector3(6.7, 0.0, 5.4)
+var home_yaw := -45.0
+var home_pitch := -48.0
+var home_size := 13.8
 
 func _ready() -> void:
     camera = Camera3D.new()
@@ -17,9 +21,31 @@ func _ready() -> void:
     _update_camera()
 
 func set_phone_view(portrait: bool) -> void:
-    pitch = -46.0 if portrait else -48.0
-    ortho_size = 11.8 if portrait else 13.2
-    target = Vector3(6.7, 0.0, 5.4)
+    home_pitch = -46.0 if portrait else -48.0
+    home_size = 11.8 if portrait else 13.2
+    pitch = home_pitch
+    ortho_size = home_size
+    home_target = Vector3(6.7, 0.0, 5.4)
+    target = home_target
+    _update_camera()
+
+func focus_on(world_position: Vector3, zoom_size := -1.0) -> void:
+    target.x = clampf(world_position.x, -1.0, 15.0)
+    target.z = clampf(world_position.z, -1.0, 13.0)
+    if zoom_size > 0.0:
+        ortho_size = clampf(zoom_size, 7.0, 26.0)
+    _update_camera()
+
+func reset_view() -> void:
+    yaw = home_yaw
+    pitch = home_pitch
+    ortho_size = home_size
+    target = home_target
+    _update_camera()
+
+func snap_quarter_turn(direction: int) -> void:
+    var quarter := roundf(yaw / 45.0)
+    yaw = fmod((quarter + float(direction)) * 45.0, 360.0)
     _update_camera()
 
 func rotate_by(degrees: float) -> void:
