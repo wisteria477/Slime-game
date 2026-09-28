@@ -1995,7 +1995,11 @@ func _queue_object_interaction(action: String, item: Dictionary) -> void:
                 slime.favorite_hobby = "Creative Project"
             "toy":
                 slime.favorite_hobby = "Toy Design"
-    var display_label := String((build_system.interaction_options_for_type(kind).filter(func(option): return String(option.get("action", "")) == action).front() if not build_system.interaction_options_for_type(kind).filter(func(option): return String(option.get("action", "")) == action).is_empty() else {}).get("label", slime._action_label(action)))
+    var display_label: String = slime._action_label(action)
+    for option in build_system.interaction_options_for_type(kind):
+        if String(option.get("action", "")) == action:
+            display_label = String(option.get("label", display_label))
+            break
     slime.queue_interaction(action, String(item.get("id", "")), target_cell, "", display_label)
     _hide_context()
     last_action_signature = ""
