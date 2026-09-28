@@ -102,6 +102,8 @@ func make_starter_home() -> void:
     _place_furniture(Vector2i(8, 3), "toilet")
     _place_furniture(Vector2i(7, 3), "sink")
     _place_furniture(Vector2i(4, 6), "bookshelf")
+    _place_furniture(Vector2i(3, 6), "desk")
+    _place_furniture(Vector2i(3, 5), "workbench")
     set_cutaway_visible(true)
     changed.emit()
 
@@ -236,7 +238,26 @@ func find_furniture(kind: String, from_cell: Vector2i) -> Dictionary:
             var path := path_between(from_cell, candidate)
             if not path.is_empty() and path.size() < best_length:
                 best_length = path.size()
-                best = {"type": kind, "cell": candidate, "furniture_cell": furniture_cell}
+                best = {
+                    "type": kind,
+                    "cell": candidate,
+                    "furniture_cell": furniture_cell,
+                    "item": item,
+                    "path_length": path.size(),
+                }
+    return best
+
+func find_first_furniture(kinds: Array[String], from_cell: Vector2i) -> Dictionary:
+    var best: Dictionary = {}
+    var best_length := 999999
+    for kind in kinds:
+        var result := find_furniture(kind, from_cell)
+        if result.is_empty():
+            continue
+        var length := int(result.get("path_length", 999999))
+        if length < best_length:
+            best_length = length
+            best = result
     return best
 
 func serialize() -> Dictionary:
@@ -615,7 +636,7 @@ func find_problem_object(problem: String, from_cell: Vector2i) -> Dictionary:
     for item in furniture:
         var qualifies := false
         if problem == "dirty":
-            qualifies = float(item.get("cleanliness", 100.0)) < 45.0
+            qualifies = float(item.get("cleanliness", 100.0)) < 68.0
         elif problem == "broken":
             qualifies = float(item.get("condition", 100.0)) < 35.0
         if not qualifies:
@@ -644,6 +665,26 @@ func repair_object(item_id: String, amount: float) -> void:
         if String(furniture[i].get("id", "")) == item_id:
             var item: Dictionary = furniture[i]
             item["condition"] = clampf(float(item.get("condition", 100.0)) + amount, 0.0, 100.0)
+            furniture[i] = item
+            return
+
+func soil_object(item_id: String, amount: float) -> void:
+    if item_id.is_empty():
+        return
+    for i in range(furniture.size()):
+        if String(furniture[i].get("id", "")) == item_id:
+            var item: Dictionary = furniture[i]
+            item["cleanliness"] = clampf(float(item.get("cleanliness", 100.0)) - amount, 0.0, 100.0)
+            furniture[i] = item
+            return
+
+func wear_object(item_id: String, amount: float) -> void:
+    if item_id.is_empty():
+        return
+    for i in range(furniture.size()):
+        if String(furniture[i].get("id", "")) == item_id:
+            var item: Dictionary = furniture[i]
+            item["condition"] = clampf(float(item.get("condition", 100.0)) - amount, 0.0, 100.0)
             furniture[i] = item
             return
 
