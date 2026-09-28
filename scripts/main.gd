@@ -175,6 +175,20 @@ func _unhandled_input(event: InputEvent) -> void:
         _screen_touch(event)
     elif event is InputEventScreenDrag:
         _screen_drag(event)
+    elif event is InputEventJoypadButton and event.pressed:
+        match event.button_index:
+            JOY_BUTTON_LEFT_SHOULDER:
+                camera_rig.rotate_by(-45.0)
+            JOY_BUTTON_RIGHT_SHOULDER:
+                camera_rig.rotate_by(45.0)
+            JOY_BUTTON_START:
+                _set_speed(0.0 if sim_speed > 0.0 else 1.0)
+            JOY_BUTTON_Y:
+                _toggle_build()
+            JOY_BUTTON_X:
+                _open_life_panel()
+            JOY_BUTTON_BACK:
+                _open_settings()
     elif event is InputEventKey and event.pressed and not event.echo:
         if event.is_action("camera_rotate_left"):
             camera_rig.rotate_by(-45.0)
@@ -187,6 +201,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _desktop_camera(delta: float) -> void:
     var amount := 5.0 * delta
+    var pads := Input.get_connected_joypads()
+    if not pads.is_empty():
+        var joy_id: int = int(pads[0])
+        var x_axis: float = Input.get_joy_axis(joy_id, JOY_AXIS_LEFT_X)
+        var y_axis: float = Input.get_joy_axis(joy_id, JOY_AXIS_LEFT_Y)
+        if absf(x_axis) > 0.18 or absf(y_axis) > 0.18:
+            camera_rig.pan_local(x_axis * amount * 1.35, y_axis * amount * 1.35)
+        var zoom_axis: float = Input.get_joy_axis(joy_id, JOY_AXIS_RIGHT_Y)
+        if absf(zoom_axis) > 0.22:
+            camera_rig.zoom_by(zoom_axis * delta * 2.8)
     if Input.is_action_pressed("camera_pan_left"):
         camera_rig.pan_local(-amount, 0)
     if Input.is_action_pressed("camera_pan_right"):
