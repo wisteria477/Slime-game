@@ -45,12 +45,12 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     _build_character()
     _apply_age_scale()
 
-func _physics_process(delta: float) -> void:
+func _physics_process(_delta: float) -> void:
     _animate_idle()
     if not sim_enabled or build_system == null:
         velocity = Vector3.ZERO
         return
-    _move_along_path(delta)
+    _move_along_path()
 
 func tick_sim(delta: float) -> void:
     if not sim_enabled:
@@ -122,14 +122,18 @@ func _build_character() -> void:
     visual_root = Node3D.new()
     visual_root.name = "Visual"
     add_child(visual_root)
-    var packed = load(MODEL_PATH)
-    if packed is PackedScene:
-        var model := packed.instantiate()
-        model.name = "NimModel"
-        model.scale = Vector3.ONE * 0.43
-        model.rotation_degrees.y = 180.0
-        visual_root.add_child(model)
-        _tint_recursive(model)
+
+    if ResourceLoader.exists(MODEL_PATH):
+        var packed = load(MODEL_PATH)
+        if packed is PackedScene:
+            var model := packed.instantiate()
+            model.name = "NimModel"
+            model.scale = Vector3.ONE * 0.43
+            model.rotation_degrees.y = 180.0
+            visual_root.add_child(model)
+            _tint_recursive(model)
+        else:
+            _make_fallback_slime()
     else:
         _make_fallback_slime()
 
@@ -158,18 +162,67 @@ func _build_character() -> void:
     add_child(state_label)
 
 func _make_fallback_slime() -> void:
-    var body := MeshInstance3D.new()
+    var jelly := StandardMaterial3D.new()
+    jelly.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, 0.90)
+    jelly.roughness = 0.14
+    jelly.metallic = 0.0
+    jelly.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+
+    _blob("Torso", Vector3(0, 0.62, 0), Vector3(0.58, 0.70, 0.50), jelly)
+    _blob("Head", Vector3(0, 1.28, 0), Vector3(0.84, 0.73, 0.72), jelly)
+    _blob("ArmL", Vector3(-0.63, 0.74, -0.02), Vector3(0.22, 0.34, 0.22), jelly)
+    _blob("ArmR", Vector3(0.63, 0.74, -0.02), Vector3(0.22, 0.34, 0.22), jelly)
+    _blob("FootL", Vector3(-0.28, 0.18, -0.03), Vector3(0.36, 0.18, 0.34), jelly)
+    _blob("FootR", Vector3(0.28, 0.18, -0.03), Vector3(0.36, 0.18, 0.34), jelly)
+    _blob("AntennaBase", Vector3(0.09, 1.93, 0.01), Vector3(0.18, 0.28, 0.17), jelly, Vector3(0, 0, -18))
+    _blob("AntennaTip", Vector3(0.23, 2.11, 0.01), Vector3(0.15, 0.17, 0.15), jelly)
+
+    var eye_mat := StandardMaterial3D.new()
+    eye_mat.albedo_color = Color("172437")
+    eye_mat.roughness = 0.12
+    _blob("EyeL", Vector3(-0.28, 1.34, -0.62), Vector3(0.12, 0.19, 0.08), eye_mat)
+    _blob("EyeR", Vector3(0.28, 1.34, -0.62), Vector3(0.12, 0.19, 0.08), eye_mat)
+
+    var white := StandardMaterial3D.new()
+    white.albedo_color = Color.WHITE
+    white.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    _blob("EyeHighlightL", Vector3(-0.32, 1.40, -0.70), Vector3(0.035, 0.05, 0.025), white)
+    _blob("EyeHighlightR", Vector3(0.24, 1.40, -0.70), Vector3(0.035, 0.05, 0.025), white)
+
+    var mouth_mat := StandardMaterial3D.new()
+    mouth_mat.albedo_color = Color("263247")
+    mouth_mat.roughness = 0.2
+    _blob("Mouth", Vector3(0, 1.08, -0.66), Vector3(0.14, 0.07, 0.045), mouth_mat)
+
+    var cheek := StandardMaterial3D.new()
+    cheek.albedo_color = Color(1.0, 0.58, 0.68, 0.68)
+    cheek.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    cheek.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    _blob("CheekL", Vector3(-0.46, 1.10, -0.61), Vector3(0.12, 0.06, 0.035), cheek)
+    _blob("CheekR", Vector3(0.46, 1.10, -0.61), Vector3(0.12, 0.06, 0.035), cheek)
+
+    var core_mat := StandardMaterial3D.new()
+    core_mat.albedo_color = Color(1.0, 0.83, 0.42, 0.52)
+    core_mat.emission_enabled = true
+    core_mat.emission = Color(1.0, 0.72, 0.24)
+    core_mat.emission_energy_multiplier = 0.65
+    core_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    _blob("Core", Vector3(0, 0.69, -0.12), Vector3(0.18, 0.25, 0.14), core_mat)
+
+func _blob(name_value: String, position_value: Vector3, scale_value: Vector3, material: Material, rotation_value := Vector3.ZERO) -> void:
+    var part := MeshInstance3D.new()
+    part.name = name_value
     var mesh := SphereMesh.new()
-    mesh.radius = 0.62
-    mesh.height = 1.0
-    body.mesh = mesh
-    body.position.y = 0.62
-    var mat := StandardMaterial3D.new()
-    mat.albedo_color = slime_color
-    mat.metallic = 0.0
-    mat.roughness = 0.18
-    body.material_override = mat
-    visual_root.add_child(body)
+    mesh.radius = 1.0
+    mesh.height = 2.0
+    mesh.radial_segments = 24
+    mesh.rings = 12
+    part.mesh = mesh
+    part.position = position_value
+    part.scale = scale_value
+    part.rotation_degrees = rotation_value
+    part.material_override = material
+    visual_root.add_child(part)
 
 func _tint_recursive(node: Node) -> void:
     if node is MeshInstance3D:
@@ -260,7 +313,7 @@ func _set_path_to(cell: Vector2i) -> void:
         path.remove_at(0)
     path_index = 0
 
-func _move_along_path(_delta: float) -> void:
+func _move_along_path() -> void:
     if path.is_empty() or path_index >= path.size():
         velocity = Vector3.ZERO
         return
