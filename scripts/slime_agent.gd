@@ -37,6 +37,26 @@ var habits: Array[String] = []
 var traits := {"playful": 0.5, "social": 0.5, "tidy": 0.5, "sleepy": 0.5}
 var needs := {"hunger": 88.0, "energy": 90.0, "hygiene": 88.0, "fun": 90.0, "social": 88.0, "comfort": 90.0}
 var relationships: Dictionary = {}
+var relationship_flags: Dictionary = {}
+var emotion := "Fine"
+var moodlets: Array[Dictionary] = []
+var skills: Dictionary = SlimeLifeRules.default_skills()
+var aspiration := ""
+var aspiration_progress: Dictionary = {}
+var wants: Array = []
+var fears: Array = []
+var satisfaction := 0
+var career := "None"
+var career_level := 1
+var career_xp := 0.0
+var school_grade := 70.0
+var inventory: Array[Dictionary] = []
+var action_queue: Array[String] = []
+var secondary_activity := ""
+var current_activity := "Idle"
+var reward_traits: Array[String] = []
+var routine_memory: Dictionary = {}
+var want_refresh_timer := 0.0
 var age_seconds := 0.0
 var sim_enabled := true
 
@@ -66,8 +86,12 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     household = household_ref
     rng.seed = hash(slime_id)
     idle_phase = rng.randf_range(0.0, TAU)
+    aspiration = SlimeLifeRules.default_aspiration(personality)
+    wants = SlimeLifeRules.random_wants(rng, 3)
+    fears = [SlimeLifeRules.random_fear(rng)]
     _build_character()
     _apply_age_scale()
+    _update_emotion()
 
 func _physics_process(_delta: float) -> void:
     _animate_idle()
@@ -80,11 +104,11 @@ func tick_sim(delta: float) -> void:
     if not sim_enabled:
         return
     age_seconds += delta
-    if age_stage == "baby" and age_seconds >= BABY_GROW_SECONDS:
-        age_stage = "adult"
-        _apply_age_scale()
-        data_changed.emit()
+    _tick_life_stage()
+    _tick_moodlets(delta)
+    _tick_wants(delta)
     _decay_needs(delta)
+    _update_emotion()
     if not action_kind.is_empty() and path.is_empty():
         _perform_action(delta)
         return
@@ -96,6 +120,8 @@ func tick_sim(delta: float) -> void:
 func command_move(cell: Vector2i) -> void:
     action_kind = ""
     target_slime_id = ""
+    current_activity = "Player directed"
+    action_queue.clear()
     state_label.text = ""
     _set_path_to(cell)
 
@@ -120,6 +146,22 @@ func serialize() -> Dictionary:
         "traits": traits.duplicate(true),
         "needs": needs.duplicate(true),
         "relationships": relationships.duplicate(true),
+        "relationship_flags": relationship_flags.duplicate(true),
+        "emotion": emotion,
+        "moodlets": moodlets.duplicate(true),
+        "skills": skills.duplicate(true),
+        "aspiration": aspiration,
+        "aspiration_progress": aspiration_progress.duplicate(true),
+        "wants": wants.duplicate(true),
+        "fears": fears.duplicate(true),
+        "satisfaction": satisfaction,
+        "career": career,
+        "career_level": career_level,
+        "career_xp": career_xp,
+        "school_grade": school_grade,
+        "inventory": inventory.duplicate(true),
+        "reward_traits": reward_traits.duplicate(),
+        "routine_memory": routine_memory.duplicate(true),
         "age_seconds": age_seconds,
         "position": [global_position.x, global_position.y, global_position.z],
     }
@@ -135,6 +177,24 @@ func restore(data: Dictionary) -> void:
     traits = data.get("traits", traits).duplicate(true)
     needs = data.get("needs", needs).duplicate(true)
     relationships = data.get("relationships", {}).duplicate(true)
+    relationship_flags = data.get("relationship_flags", {}).duplicate(true)
+    emotion = String(data.get("emotion", "Fine"))
+    moodlets = data.get("moodlets", []).duplicate(true)
+    skills = data.get("skills", SlimeLifeRules.default_skills()).duplicate(true)
+    aspiration = String(data.get("aspiration", SlimeLifeRules.default_aspiration(personality)))
+    aspiration_progress = data.get("aspiration_progress", {}).duplicate(true)
+    wants = data.get("wants", SlimeLifeRules.random_wants(rng, 3)).duplicate(true)
+    fears = data.get("fears", [SlimeLifeRules.random_fear(rng)]).duplicate(true)
+    satisfaction = int(data.get("satisfaction", 0))
+    career = String(data.get("career", "None"))
+    career_level = int(data.get("career_level", 1))
+    career_xp = float(data.get("career_xp", 0.0))
+    school_grade = float(data.get("school_grade", 70.0))
+    inventory = data.get("inventory", []).duplicate(true)
+    reward_traits.clear()
+    for reward in data.get("reward_traits", []):
+        reward_traits.append(String(reward))
+    routine_memory = data.get("routine_memory", {}).duplicate(true)
     age_seconds = float(data.get("age_seconds", 0.0))
     var pos: Array = data.get("position", [global_position.x, global_position.y, global_position.z])
     global_position = Vector3(float(pos[0]), float(pos[1]), float(pos[2]))
@@ -281,8 +341,28 @@ func _apply_age_scale() -> void:
 func _animate_idle() -> void:
     if visual_root == null:
         return
-    var pulse := sin(Time.get_ticks_msec() * 0.004 + idle_phase) * 0.025
-    visual_root.scale = Vector3(base_visual_scale.x * (1.0 - pulse * 0.35), base_visual_scale.y * (1.0 + pulse), base_visual_scale.z * (1.0 - pulse * 0.35))
+    var now := Time.get_ticks_msec() * 0.004 + idle_phase
+    var pulse_strength := 0.025
+    if action_kind == "fun":
+        pulse_strength = 0.075
+    elif action_kind == "hygiene":
+        pulse_strength = 0.045
+    elif action_kind == "energy":
+        pulse_strength = 0.012
+    elif action_kind == "social":
+        pulse_strength = 0.05
+    var pulse := sin(now) * pulse_strength
+    visual_root.scale = Vector3(
+        base_visual_scale.x * (1.0 - pulse * 0.35),
+        base_visual_scale.y * (1.0 + pulse),
+        base_visual_scale.z * (1.0 - pulse * 0.35)
+    )
+    var lean := 0.0
+    if action_kind == "fun":
+        lean = sin(now * 1.7) * 0.11
+    elif action_kind == "social":
+        lean = sin(now * 1.25) * 0.055
+    visual_root.rotation.z = lean
 
 func _decay_needs(delta: float) -> void:
     var rates := {
@@ -347,6 +427,7 @@ func _priority_score(key: String) -> float:
     return score
 
 func _choose_next_goal() -> void:
+    _plan_action_queue()
     var best_key := ""
     var best_score := -INF
     for key in needs.keys():
@@ -367,8 +448,9 @@ func _choose_next_goal() -> void:
 
     if habits.has("Wanderer") or rng.randf() < 0.72:
         var target := build_system.random_walkable_cell(rng)
+        current_activity = "Exploring" if habits.has("Wanderer") else "Wandering"
         _set_path_to(target)
-        state_label.text = "Exploring" if habits.has("Wanderer") else "Wandering"
+        state_label.text = current_activity
 
 func _seek_need(key: String) -> void:
     if key == "social":
@@ -376,6 +458,7 @@ func _seek_need(key: String) -> void:
         if other:
             target_slime_id = other.slime_id
             action_kind = "social"
+            current_activity = "Socializing"
             _set_path_to(other.current_cell())
             state_label.text = "Chat"
             return
@@ -392,6 +475,7 @@ func _seek_need(key: String) -> void:
     if target.is_empty():
         return
     action_kind = key
+    current_activity = _action_label(key)
     target_slime_id = ""
     _set_path_to(target["cell"])
     state_label.text = _action_label(key)
@@ -444,6 +528,12 @@ func _perform_action(delta: float) -> void:
             other.needs["social"] = clampf(float(other.needs["social"]) + 6.0 * delta, 0.0, NEED_MAX)
             relationships[other.slime_id] = float(relationships.get(other.slime_id, 0.0)) + 1.2 * delta
             other.relationships[slime_id] = float(other.relationships.get(slime_id, 0.0)) + 1.2 * delta
+            gain_skill("social", 1.8 * delta)
+            other.gain_skill("social", 1.0 * delta)
+            _complete_want("social")
+            if float(relationships.get(other.slime_id, 0.0)) >= 35.0:
+                relationship_flags[other.slime_id] = "Friend"
+                other.relationship_flags[slime_id] = "Friend"
     else:
         var recovery := 13.0
         if (action_kind == "fun" and habits.has("Toy Lover")) or (action_kind == "hygiene" and habits.has("Tidy Routine")):
@@ -453,20 +543,219 @@ func _perform_action(delta: float) -> void:
         elif action_kind == "comfort" and habits.has("Cozy Seeker"):
             recovery = 15.0
         needs[action_kind] = clampf(float(needs.get(action_kind, 0.0)) + recovery * delta, 0.0, NEED_MAX)
+        _gain_activity_skill(action_kind, delta)
+        _complete_want(_want_id_for_action(action_kind))
+        _try_secondary_social(delta)
     if action_timer >= 4.0 or float(needs.get(action_kind, 0.0)) >= 96.0:
         action_timer = 0.0
         action_kind = ""
         target_slime_id = ""
+        secondary_activity = ""
+        current_activity = "Thinking"
         state_label.text = ""
-        think_timer = rng.randf_range(1.5, 3.0)
+        think_timer = rng.randf_range(1.0, 2.0)
         data_changed.emit()
 
+func _tick_life_stage() -> void:
+    if not SlimeLifeRules.AGE_DURATIONS.has(age_stage):
+        return
+    var duration := float(SlimeLifeRules.AGE_DURATIONS[age_stage])
+    if age_seconds < duration:
+        return
+    var old_stage := age_stage
+    age_stage = SlimeLifeRules.next_age(age_stage)
+    age_seconds = 0.0
+    add_moodlet("Growing Up", "Happy", 18.0, 32.0)
+    current_activity = "Grew from %s to %s" % [old_stage, age_stage]
+    _apply_age_scale()
+    data_changed.emit()
+
+func _tick_moodlets(delta: float) -> void:
+    for i in range(moodlets.size() - 1, -1, -1):
+        var mood: Dictionary = moodlets[i]
+        mood["time"] = float(mood.get("time", 0.0)) - delta
+        if float(mood["time"]) <= 0.0:
+            moodlets.remove_at(i)
+        else:
+            moodlets[i] = mood
+    if float(needs.get("hunger", 100.0)) < 18.0:
+        _ensure_moodlet("Very Hungry", "Uncomfortable", 12.0, 8.0)
+    if float(needs.get("energy", 100.0)) < 18.0:
+        _ensure_moodlet("Exhausted", "Tired", 12.0, 8.0)
+    if float(needs.get("social", 100.0)) < 18.0:
+        _ensure_moodlet("Lonely", "Sad", 10.0, 8.0)
+    if float(needs.get("fun", 100.0)) > 86.0:
+        _ensure_moodlet("Having Fun", "Playful", 6.0, 6.0)
+
+func _tick_wants(delta: float) -> void:
+    want_refresh_timer += delta
+    if want_refresh_timer >= 55.0:
+        want_refresh_timer = 0.0
+        if wants.size() < 3:
+            for want in SlimeLifeRules.random_wants(rng, 3):
+                if wants.size() >= 3:
+                    break
+                var duplicate := false
+                for existing in wants:
+                    if String(existing.get("id", "")) == String(want.get("id", "")):
+                        duplicate = true
+                if not duplicate:
+                    wants.append(want)
+
+func add_moodlet(text_value: String, emotion_value: String, strength := 5.0, duration := 20.0) -> void:
+    moodlets.append({"text": text_value, "emotion": emotion_value, "strength": strength, "time": duration})
+    if moodlets.size() > 8:
+        moodlets.pop_front()
+    _update_emotion()
+
+func _ensure_moodlet(text_value: String, emotion_value: String, strength: float, duration: float) -> void:
+    for mood in moodlets:
+        if String(mood.get("text", "")) == text_value:
+            return
+    add_moodlet(text_value, emotion_value, strength, duration)
+
+func _update_emotion() -> void:
+    var scores := {"Fine": 1.0}
+    for mood in moodlets:
+        var key := String(mood.get("emotion", "Fine"))
+        scores[key] = float(scores.get(key, 0.0)) + float(mood.get("strength", 1.0))
+    if float(needs.get("comfort", 100.0)) < 20.0:
+        scores["Uncomfortable"] = float(scores.get("Uncomfortable", 0.0)) + 12.0
+    var best := "Fine"
+    var best_value := -INF
+    for key in scores.keys():
+        var value := float(scores[key])
+        if value > best_value:
+            best_value = value
+            best = String(key)
+    emotion = best
+
+func _plan_action_queue() -> void:
+    var scored: Array = []
+    for key in needs.keys():
+        scored.append({"key": String(key), "score": _priority_score(String(key))})
+    scored.sort_custom(func(a, b): return float(a["score"]) > float(b["score"]))
+    action_queue.clear()
+    for entry in scored:
+        if action_queue.size() >= 3:
+            break
+        action_queue.append(_action_label(String(entry["key"])))
+
+func queue_text() -> String:
+    if action_queue.is_empty():
+        return current_activity
+    return " → ".join(action_queue)
+
+func gain_skill(skill: String, amount: float) -> void:
+    if not skills.has(skill):
+        return
+    var data: Dictionary = skills[skill]
+    var multiplier := 1.0
+    if reward_traits.has("Fast Learner"):
+        multiplier += 0.35
+    data["xp"] = float(data.get("xp", 0.0)) + amount * multiplier
+    var level := int(data.get("level", 0))
+    var needed := 18.0 + float(level) * 14.0
+    while float(data["xp"]) >= needed and level < 10:
+        data["xp"] = float(data["xp"]) - needed
+        level += 1
+        data["level"] = level
+        satisfaction += 25
+        add_moodlet("Learned %s %d" % [skill.capitalize(), level], "Focused", 7.0, 18.0)
+        needed = 18.0 + float(level) * 14.0
+    skills[skill] = data
+
+func skill_level(skill: String) -> int:
+    if not skills.has(skill):
+        return 0
+    return int((skills[skill] as Dictionary).get("level", 0))
+
+func _gain_activity_skill(kind: String, delta: float) -> void:
+    match kind:
+        "hunger":
+            gain_skill("cooking", 0.8 * delta)
+        "hygiene":
+            gain_skill("cleaning", 0.7 * delta)
+        "fun":
+            gain_skill("creativity", 0.8 * delta)
+        "comfort":
+            gain_skill("logic", 0.35 * delta)
+        "social":
+            gain_skill("social", 0.8 * delta)
+
+func _want_id_for_action(kind: String) -> String:
+    return {
+        "hunger": "eat",
+        "energy": "sleep",
+        "hygiene": "wash",
+        "fun": "play",
+        "social": "social",
+        "comfort": "cozy",
+    }.get(kind, "")
+
+func _complete_want(want_id: String) -> void:
+    if want_id.is_empty():
+        return
+    for i in range(wants.size() - 1, -1, -1):
+        if String(wants[i].get("id", "")) == want_id:
+            satisfaction += 40
+            add_moodlet("Want fulfilled", "Happy", 8.0, 16.0)
+            wants.remove_at(i)
+
+func _try_secondary_social(delta: float) -> void:
+    if float(needs.get("social", 100.0)) > 72.0:
+        secondary_activity = ""
+        return
+    var other: SlimeAgent = household.find_nearest_other(slime_id, global_position)
+    if other == null or global_position.distance_to(other.global_position) > 2.2:
+        secondary_activity = ""
+        return
+    secondary_activity = "Chatting while busy"
+    needs["social"] = clampf(float(needs["social"]) + 2.2 * delta, 0.0, NEED_MAX)
+    relationships[other.slime_id] = float(relationships.get(other.slime_id, 0.0)) + 0.25 * delta
+    gain_skill("social", 0.25 * delta)
+
+func assign_career(career_name: String) -> void:
+    if not SlimeLifeRules.CAREERS.has(career_name):
+        return
+    career = career_name
+    career_level = 1
+    career_xp = 0.0
+    add_moodlet("New Job", "Happy", 8.0, 24.0)
+
+func career_text() -> String:
+    if career == "None":
+        return "No career"
+    return "%s Lv.%d" % [career, career_level]
+
+func add_inventory_item(item_name: String, quantity := 1) -> void:
+    for item in inventory:
+        if String(item.get("name", "")) == item_name:
+            item["quantity"] = int(item.get("quantity", 0)) + quantity
+            return
+    inventory.append({"name": item_name, "quantity": quantity})
+
+func profile_detail_text() -> String:
+    var best_skill := ""
+    var best_level := -1
+    for skill in skills.keys():
+        var level := skill_level(String(skill))
+        if level > best_level:
+            best_level = level
+            best_skill = String(skill)
+    var want_text := "No current want"
+    if not wants.is_empty():
+        want_text = String(wants[0].get("text", ""))
+    return "%s • %s • %s %d • %s" % [emotion, aspiration, best_skill.capitalize(), best_level, want_text]
+
 func activity_text() -> String:
+    if not secondary_activity.is_empty():
+        return "%s + %s" % [current_activity, secondary_activity]
     if not action_kind.is_empty():
         return _action_label(action_kind)
     if not path.is_empty():
         return "Exploring" if habits.has("Wanderer") else "Walking"
-    return "Thinking"
+    return current_activity
 
 func profile_text() -> String:
     var parts: Array[String] = [personality]
