@@ -54,7 +54,7 @@ func add_baby(parent_a_id: String, parent_b_id: String, baby_name: String) -> Sl
         clampf((a.slime_color.b + b.slime_color.b) * 0.5 + rng.randf_range(-0.04, 0.04), 0.0, 1.0),
         1.0
     )
-    var inherited_personality := a.personality if rng.randf() < 0.5 else b.personality
+    var inherited_personality: String = a.personality if rng.randf() < 0.5 else b.personality
     var inherited_habits: Array[String] = []
     var pool: Array[String] = []
     for habit in a.habits:
