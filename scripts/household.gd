@@ -7,6 +7,7 @@ signal selection_changed(slime)
 var slime_root: Node3D
 var build_system: SlimeBuildSystem
 var slimes: Array[SlimeAgent] = []
+var npcs: Array[SlimeAgent] = []
 var selected_id := ""
 var next_number := 1
 var funds := 2500
@@ -30,7 +31,11 @@ func clear() -> void:
     for slime in slimes:
         if is_instance_valid(slime):
             slime.queue_free()
+    for npc in npcs:
+        if is_instance_valid(npc):
+            npc.queue_free()
     slimes.clear()
+    npcs.clear()
     selected_id = ""
     next_number = 1
     funds = 2500
@@ -106,6 +111,8 @@ func add_baby(parent_a_id: String, parent_b_id: String, baby_name: String) -> Sl
 func tick(delta: float) -> void:
     for slime in slimes:
         slime.tick_sim(delta)
+    for npc in npcs:
+        npc.tick_sim(delta)
 
 func tick_world(day: int, hour: int, minute: int, delta: float) -> void:
     build_system.tick_environment(delta)
@@ -168,6 +175,55 @@ func get_slime(id_value: String) -> SlimeAgent:
             return slime
     return null
 
+func get_any_slime(id_value: String) -> SlimeAgent:
+    var household_slime := get_slime(id_value)
+    if household_slime:
+        return household_slime
+    for npc in npcs:
+        if npc.slime_id == id_value:
+            return npc
+    return null
+
+func all_present_slimes() -> Array[SlimeAgent]:
+    var result: Array[SlimeAgent] = []
+    result.append_array(slimes)
+    result.append_array(npcs)
+    return result
+
+func clear_npcs() -> void:
+    for npc in npcs:
+        if is_instance_valid(npc):
+            npc.queue_free()
+    npcs.clear()
+
+func spawn_npcs(count: int) -> void:
+    clear_npcs()
+    var names := ["Mochi", "Pip", "Lumi", "Gloop", "Dot", "Mallow", "Fizz", "Pebble"]
+    var colors := [Color("7bd9ff"), Color("f2a0c0"), Color("8ce0b0"), Color("ffd66e"), Color("bca5ff"), Color("f3b47e")]
+    var personalities := ["Bubbly", "Playful", "Neat", "Foodie", "Cozy", "Independent"]
+    var habits_pool := ["Snacky", "Napper", "Tidy Routine", "Toy Lover", "Chatty", "Cozy Seeker", "Wanderer", "Slow Starter"]
+    for i in range(count):
+        var npc := SlimeAgent.new()
+        npc.is_npc = true
+        slime_root.add_child(npc)
+        var habits_value: Array[String] = [
+            String(habits_pool[rng.randi_range(0, habits_pool.size() - 1)]),
+            String(habits_pool[rng.randi_range(0, habits_pool.size() - 1)]),
+        ]
+        npc.setup(
+            "npc_%d_%d" % [Time.get_ticks_msec(), i],
+            names[(i + rng.randi_range(0, names.size() - 1)) % names.size()],
+            colors[(i + rng.randi_range(0, colors.size() - 1)) % colors.size()],
+            "adult",
+            build_system,
+            self,
+            personalities[(i + rng.randi_range(0, personalities.size() - 1)) % personalities.size()],
+            habits_value
+        )
+        var spawn := build_system.find_spawn_cell(Vector2i(2 + (i * 2) % 7, 4 + i % 2))
+        npc.global_position = build_system.cell_to_world(spawn) + Vector3(0, 0.02, 0)
+        npcs.append(npc)
+
 func adult_slimes() -> Array[SlimeAgent]:
     var result: Array[SlimeAgent] = []
     for slime in slimes:
@@ -193,7 +249,7 @@ func find_needy_baby(caregiver_id: String) -> SlimeAgent:
 func find_nearest_other(id_value: String, position: Vector3) -> SlimeAgent:
     var best: SlimeAgent = null
     var distance := INF
-    for slime in slimes:
+    for slime in all_present_slimes():
         if slime.slime_id == id_value:
             continue
         var d := position.distance_squared_to(slime.global_position)
@@ -249,8 +305,8 @@ func relationship_label(a: SlimeAgent, b: SlimeAgent) -> String:
     return "Stranger"
 
 func social_interact(a_id: String, b_id: String, interaction: String) -> bool:
-    var a := get_slime(a_id)
-    var b := get_slime(b_id)
+    var a := get_any_slime(a_id)
+    var b := get_any_slime(b_id)
     if a == null or b == null or a == b:
         return false
     var friendship_delta := 0.0
