@@ -7,11 +7,33 @@ const MODEL_PATH := "res://assets/models/nim_slime_current.glb"
 const NEED_MAX := 100.0
 const BABY_GROW_SECONDS := 120.0
 
+const PERSONALITY_NEED_BONUS := {
+    "Bubbly": {"social": 18.0, "fun": 12.0},
+    "Playful": {"fun": 24.0, "social": 6.0},
+    "Neat": {"hygiene": 25.0, "comfort": 5.0},
+    "Foodie": {"hunger": 25.0, "fun": 4.0},
+    "Cozy": {"comfort": 24.0, "energy": 10.0},
+    "Independent": {"comfort": 10.0, "energy": 8.0, "social": -10.0},
+}
+
+const HABIT_NEED_BONUS := {
+    "Snacky": {"hunger": 18.0},
+    "Napper": {"energy": 18.0},
+    "Tidy Routine": {"hygiene": 18.0},
+    "Toy Lover": {"fun": 18.0},
+    "Chatty": {"social": 18.0},
+    "Cozy Seeker": {"comfort": 18.0},
+    "Wanderer": {},
+    "Slow Starter": {"energy": 5.0, "comfort": 5.0},
+}
+
 var slime_id := ""
 var display_name := "Slime"
 var age_stage := "adult"
 var parents: Array[String] = []
 var slime_color := Color("68d7ff")
+var personality := "Bubbly"
+var habits: Array[String] = []
 var traits := {"playful": 0.5, "social": 0.5, "tidy": 0.5, "sleepy": 0.5}
 var needs := {"hunger": 88.0, "energy": 90.0, "hygiene": 88.0, "fun": 90.0, "social": 88.0, "comfort": 90.0}
 var relationships: Dictionary = {}
@@ -33,11 +55,13 @@ var state_label: Label3D
 var base_visual_scale := Vector3.ONE
 var idle_phase := 0.0
 
-func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref) -> void:
+func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref, personality_value := "Bubbly", habits_value: Array[String] = []) -> void:
     slime_id = id_value
     display_name = name_value
     slime_color = color_value
     age_stage = stage
+    personality = personality_value
+    habits = habits_value.duplicate()
     build_system = build_ref
     household = household_ref
     rng.seed = hash(slime_id)
@@ -91,6 +115,8 @@ func serialize() -> Dictionary:
         "age_stage": age_stage,
         "parents": parents.duplicate(),
         "color": slime_color.to_html(true),
+        "personality": personality,
+        "habits": habits.duplicate(),
         "traits": traits.duplicate(true),
         "needs": needs.duplicate(true),
         "relationships": relationships.duplicate(true),
@@ -102,6 +128,10 @@ func restore(data: Dictionary) -> void:
     parents.clear()
     for p in data.get("parents", []):
         parents.append(String(p))
+    personality = String(data.get("personality", personality))
+    habits.clear()
+    for habit in data.get("habits", []):
+        habits.append(String(habit))
     traits = data.get("traits", traits).duplicate(true)
     needs = data.get("needs", needs).duplicate(true)
     relationships = data.get("relationships", {}).duplicate(true)
@@ -256,30 +286,89 @@ func _animate_idle() -> void:
 
 func _decay_needs(delta: float) -> void:
     var rates := {
-        "hunger": 0.20,
-        "energy": 0.12,
-        "hygiene": 0.09,
-        "fun": 0.11,
-        "social": 0.10,
-        "comfort": 0.07,
+        "hunger": 0.34,
+        "energy": 0.22,
+        "hygiene": 0.17,
+        "fun": 0.22,
+        "social": 0.20,
+        "comfort": 0.15,
     }
     for key in needs.keys():
-        needs[key] = clampf(float(needs[key]) - float(rates.get(key, 0.08)) * delta, 0.0, NEED_MAX)
+        var rate := float(rates.get(key, 0.16)) * _decay_multiplier(String(key))
+        needs[key] = clampf(float(needs[key]) - rate * delta, 0.0, NEED_MAX)
+
+func _decay_multiplier(key: String) -> float:
+    var mult := 1.0
+    match personality:
+        "Playful":
+            if key == "fun":
+                mult += 0.28
+        "Neat":
+            if key == "hygiene":
+                mult += 0.24
+        "Foodie":
+            if key == "hunger":
+                mult += 0.26
+        "Cozy":
+            if key == "comfort":
+                mult += 0.24
+        "Bubbly":
+            if key == "social":
+                mult += 0.24
+        "Independent":
+            if key == "social":
+                mult -= 0.28
+    if habits.has("Snacky") and key == "hunger":
+        mult += 0.18
+    if habits.has("Napper") and key == "energy":
+        mult += 0.16
+    if habits.has("Tidy Routine") and key == "hygiene":
+        mult += 0.16
+    if habits.has("Toy Lover") and key == "fun":
+        mult += 0.16
+    if habits.has("Chatty") and key == "social":
+        mult += 0.16
+    if habits.has("Cozy Seeker") and key == "comfort":
+        mult += 0.16
+    return maxf(mult, 0.45)
+
+func _priority_score(key: String) -> float:
+    var need_value := float(needs.get(key, NEED_MAX))
+    var score := (NEED_MAX - need_value)
+    var personality_bonuses: Dictionary = PERSONALITY_NEED_BONUS.get(personality, {})
+    score += float(personality_bonuses.get(key, 0.0))
+    for habit in habits:
+        var habit_bonuses: Dictionary = HABIT_NEED_BONUS.get(habit, {})
+        score += float(habit_bonuses.get(key, 0.0))
+    if need_value < 45.0:
+        score += 35.0
+    elif need_value < 65.0:
+        score += 18.0
+    return score
 
 func _choose_next_goal() -> void:
-    var lowest_key := ""
-    var lowest_value := NEED_MAX + 1.0
+    var best_key := ""
+    var best_score := -INF
     for key in needs.keys():
-        var value := float(needs[key])
-        if value < lowest_value:
-            lowest_value = value
-            lowest_key = String(key)
-    if lowest_value < 72.0:
-        _seek_need(lowest_key)
-    elif rng.randf() < 0.55:
+        var key_string := String(key)
+        var score := _priority_score(key_string)
+        if score > best_score:
+            best_score = score
+            best_key = key_string
+
+    var proactive_threshold := 23.0
+    if habits.has("Slow Starter"):
+        proactive_threshold = 28.0
+
+    if best_score >= proactive_threshold:
+        _seek_need(best_key)
+        if not action_kind.is_empty() or not path.is_empty():
+            return
+
+    if habits.has("Wanderer") or rng.randf() < 0.72:
         var target := build_system.random_walkable_cell(rng)
         _set_path_to(target)
-        state_label.text = ""
+        state_label.text = "Exploring" if habits.has("Wanderer") else "Wandering"
 
 func _seek_need(key: String) -> void:
     if key == "social":
@@ -330,7 +419,12 @@ func _move_along_path() -> void:
             velocity = Vector3.ZERO
         return
     var speed := 1.10 if age_stage == "baby" else 1.65
-    velocity = flat_delta.normalized() * speed
+    if habits.has("Slow Starter"):
+        speed *= 0.88
+    var direction := flat_delta.normalized()
+    var target_yaw := atan2(direction.x, direction.z) + PI
+    rotation.y = lerp_angle(rotation.y, target_yaw, 0.18)
+    velocity = direction * speed
     velocity.y = 0.0
     move_and_slide()
 
@@ -342,12 +436,23 @@ func _perform_action(delta: float) -> void:
             if global_position.distance_to(other.global_position) > 2.0:
                 _set_path_to(other.current_cell())
                 return
+            var face_delta := other.global_position - global_position
+            face_delta.y = 0.0
+            if face_delta.length() > 0.05:
+                rotation.y = lerp_angle(rotation.y, atan2(face_delta.x, face_delta.z) + PI, 0.15)
             needs["social"] = clampf(float(needs["social"]) + 10.0 * delta, 0.0, NEED_MAX)
             other.needs["social"] = clampf(float(other.needs["social"]) + 6.0 * delta, 0.0, NEED_MAX)
             relationships[other.slime_id] = float(relationships.get(other.slime_id, 0.0)) + 1.2 * delta
             other.relationships[slime_id] = float(other.relationships.get(slime_id, 0.0)) + 1.2 * delta
     else:
-        needs[action_kind] = clampf(float(needs.get(action_kind, 0.0)) + 13.0 * delta, 0.0, NEED_MAX)
+        var recovery := 13.0
+        if (action_kind == "fun" and habits.has("Toy Lover")) or (action_kind == "hygiene" and habits.has("Tidy Routine")):
+            recovery = 16.0
+        elif (action_kind == "hunger" and habits.has("Snacky")) or (action_kind == "energy" and habits.has("Napper")):
+            recovery = 15.0
+        elif action_kind == "comfort" and habits.has("Cozy Seeker"):
+            recovery = 15.0
+        needs[action_kind] = clampf(float(needs.get(action_kind, 0.0)) + recovery * delta, 0.0, NEED_MAX)
     if action_timer >= 4.0 or float(needs.get(action_kind, 0.0)) >= 96.0:
         action_timer = 0.0
         action_kind = ""
@@ -355,6 +460,19 @@ func _perform_action(delta: float) -> void:
         state_label.text = ""
         think_timer = rng.randf_range(1.5, 3.0)
         data_changed.emit()
+
+func activity_text() -> String:
+    if not action_kind.is_empty():
+        return _action_label(action_kind)
+    if not path.is_empty():
+        return "Exploring" if habits.has("Wanderer") else "Walking"
+    return "Thinking"
+
+func profile_text() -> String:
+    var parts: Array[String] = [personality]
+    for habit in habits:
+        parts.append(habit)
+    return " • ".join(parts)
 
 func _action_label(key: String) -> String:
     return {
