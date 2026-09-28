@@ -31,6 +31,8 @@ var needs_panel: PanelContainer
 var needs_row: GridContainer
 var needs_title: Label
 var needs_profile: Label
+var needs_toggle_button: Button
+var needs_expanded := false
 var build_button: Button
 var baby_button: Button
 var build_tray: PanelContainer
@@ -339,34 +341,48 @@ func _apply_responsive_layout() -> void:
     money_label.offset_bottom = 136 if portrait else 64
     money_label.add_theme_font_size_override("font_size", 18 if portrait else 20)
 
-    needs_panel.offset_left = 38 if portrait else 150
-    needs_panel.offset_right = -38 if portrait else -150
-    needs_panel.offset_top = -222 if portrait else -130
-    needs_panel.offset_bottom = -22
-    needs_title.add_theme_font_size_override("font_size", 26 if portrait else 22)
+    needs_panel.offset_left = 24 if portrait else 180
+    needs_panel.offset_right = -24 if portrait else -180
+    needs_panel.offset_top = (-250 if needs_expanded else -122) if portrait else (-168 if needs_expanded else -98)
+    needs_panel.offset_bottom = -18
+    needs_title.add_theme_font_size_override("font_size", 24 if portrait else 22)
     if needs_profile:
-        needs_profile.add_theme_font_size_override("font_size", 18 if portrait else 15)
+        needs_profile.add_theme_font_size_override("font_size", 16 if portrait else 15)
+    if needs_row:
+        needs_row.visible = needs_expanded
 
-    build_button.custom_minimum_size = Vector2(154, 72)
-    build_button.offset_left = -176
-    build_button.offset_right = -22
-    life_button.custom_minimum_size = Vector2(154, 72)
-    life_button.offset_left = 22
-    life_button.offset_right = 176
+    build_button.custom_minimum_size = Vector2(132, 62)
+    build_button.offset_left = -150
+    build_button.offset_right = -18
+    life_button.custom_minimum_size = Vector2(118, 62)
+    life_button.offset_left = 18
+    life_button.offset_right = 136
+    camera_button.custom_minimum_size = Vector2(118, 62)
+    camera_button.offset_left = 146
+    camera_button.offset_right = 264
+    needs_toggle_button.custom_minimum_size = Vector2(118, 62)
+    needs_toggle_button.offset_left = 274
+    needs_toggle_button.offset_right = 392
     if portrait:
-        build_button.offset_top = -300
-        build_button.offset_bottom = -228
-        life_button.offset_top = -300
-        life_button.offset_bottom = -228
-        camera_button.offset_top = -300
-        camera_button.offset_bottom = -228
+        var control_top := -198 if not needs_expanded else -326
+        var control_bottom := control_top + 62
+        build_button.offset_top = control_top
+        build_button.offset_bottom = control_bottom
+        life_button.offset_top = control_top
+        life_button.offset_bottom = control_bottom
+        camera_button.offset_top = control_top
+        camera_button.offset_bottom = control_bottom
+        needs_toggle_button.offset_top = control_top
+        needs_toggle_button.offset_bottom = control_bottom
     else:
         build_button.offset_top = -94
-        build_button.offset_bottom = -22
+        build_button.offset_bottom = -32
         life_button.offset_top = -94
-        life_button.offset_bottom = -22
+        life_button.offset_bottom = -32
         camera_button.offset_top = -94
-        camera_button.offset_bottom = -22
+        camera_button.offset_bottom = -32
+        needs_toggle_button.offset_top = -94
+        needs_toggle_button.offset_bottom = -32
 
     build_tray.offset_left = 24
     build_tray.offset_right = -24
@@ -421,6 +437,13 @@ func _build_ui() -> void:
 
     life_button = _button("LIFE", _open_life_panel, Vector2(104, 54))
     camera_button = _button("VIEW", _reset_camera, Vector2(104, 54))
+    needs_toggle_button = _button("NEEDS", _toggle_needs, Vector2(104, 54))
+    needs_toggle_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+    needs_toggle_button.offset_left = 246
+    needs_toggle_button.offset_right = 350
+    needs_toggle_button.offset_top = -72
+    needs_toggle_button.offset_bottom = -18
+    root_ui.add_child(needs_toggle_button)
     camera_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
     camera_button.offset_left = 132
     camera_button.offset_right = 236
@@ -465,6 +488,7 @@ func _build_ui() -> void:
     needs_box.add_child(needs_profile)
     needs_row = GridContainer.new()
     needs_row.columns = 4
+    needs_row.visible = false
     needs_row.add_theme_constant_override("h_separation", 12)
     needs_row.add_theme_constant_override("v_separation", 7)
     needs_box.add_child(needs_row)
@@ -522,6 +546,13 @@ func _build_ui() -> void:
     root_ui.add_child(status_label)
     _refresh_family()
     _refresh_needs_panel()
+
+func _toggle_needs() -> void:
+    needs_expanded = not needs_expanded
+    needs_toggle_button.text = "HIDE" if needs_expanded else "NEEDS"
+    if needs_row:
+        needs_row.visible = needs_expanded
+    _apply_responsive_layout()
 
 func _build_life_panel() -> void:
     life_overlay = ColorRect.new()
@@ -1365,6 +1396,8 @@ func _toggle_build() -> void:
     needs_panel.visible = not build_mode and household.selected_slime() != null
     build_button.visible = not build_mode
     life_button.visible = not build_mode
+    camera_button.visible = not build_mode
+    needs_toggle_button.visible = not build_mode
     build_system.set_cutaway_visible(not build_mode)
     for slime in household.slimes:
         slime.sim_enabled = not build_mode
@@ -1554,6 +1587,8 @@ func load_game(slot := -1) -> bool:
     build_tray.visible = false
     build_button.visible = true
     life_button.visible = true
+    camera_button.visible = true
+    needs_toggle_button.visible = true
     _refresh_family()
     _refresh_needs_panel()
     _refresh_money()
