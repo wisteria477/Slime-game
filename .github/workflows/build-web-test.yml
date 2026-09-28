@@ -1,0 +1,98 @@
+name: Build phone web test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "project.godot"
+      - "export_presets.cfg"
+      - "scenes/**"
+      - "scripts/**"
+      - "assets/**"
+      - "ci/**"
+      - ".github/workflows/build-web-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: 4.7.2-stable
+  GODOT_TEMPLATE_DIR: 4.7.2.stable
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Validate project
+        run: python3 ci/validate_project.py
+
+      - name: Download Godot
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"             -o godot.zip
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" godot
+          chmod +x godot
+          ./godot --version
+
+      - name: Cache export templates
+        id: template-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates/${{ env.GODOT_TEMPLATE_DIR }}
+          key: godot-${{ env.GODOT_VERSION }}-web-export-templates-v1
+
+      - name: Install export templates
+        if: steps.template-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"             -o templates.tpz
+          rm -rf /tmp/godot-export-templates
+          mkdir -p /tmp/godot-export-templates
+          unzip -q templates.tpz -d /tmp/godot-export-templates
+          target="$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          mkdir -p "$target"
+          cp -R /tmp/godot-export-templates/templates/. "$target/"
+          test -f "$target/web_release.zip"
+
+      - name: Import and compile scripts
+        run: |
+          set -o pipefail
+          ./godot --headless --editor --path . --quit 2>&1 | tee godot-import.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|Failed to load script" godot-import.log; then
+            exit 1
+          fi
+
+      - name: Export actual Godot web build
+        run: |
+          set -o pipefail
+          rm -rf build/web
+          mkdir -p build/web
+          ./godot --headless --path . --export-release "Web" "build/web/index.html" 2>&1 | tee godot-web-export.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|Export failed|ERROR:" godot-web-export.log; then
+            exit 1
+          fi
+          test -s build/web/index.html
+          test -n "$(find build/web -maxdepth 1 -name '*.wasm' -print -quit)"
+          test -n "$(find build/web -maxdepth 1 -name '*.pck' -print -quit)"
+          touch build/web/.nojekyll
+          printf '%s
+' "Slime Life phone test — built from commit ${GITHUB_SHA}" > build/web/build.txt
+          ls -lh build/web
+
+      - name: Publish gh-pages branch
+        run: |
+          rm -rf /tmp/slime-life-web
+          mkdir -p /tmp/slime-life-web
+          cp -R build/web/. /tmp/slime-life-web/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan gh-pages
+          git rm -rf . >/dev/null 2>&1 || true
+          cp -R /tmp/slime-life-web/. .
+          git add -A
+          git commit -m "Publish phone web test for ${GITHUB_SHA}"
+          git push --force origin gh-pages
