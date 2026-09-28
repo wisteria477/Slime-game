@@ -22,6 +22,8 @@ var relationship_events: Array[Dictionary] = []
 var event_name := ""
 var event_timer := 0.0
 var event_score := 0.0
+var mortality_enabled := false
+var inactive_households: Array[Dictionary] = []
 var last_schedule_key := ""
 var rng := RandomNumberGenerator.new()
 
@@ -52,6 +54,8 @@ func clear() -> void:
     event_name = ""
     event_timer = 0.0
     event_score = 0.0
+    mortality_enabled = false
+    inactive_households.clear()
     current_lot = "Home"
     household_changed.emit()
     selection_changed.emit(null)
@@ -125,6 +129,7 @@ func tick(delta: float) -> void:
         slime.tick_sim(delta)
     for npc in npcs:
         npc.tick_sim(delta)
+    _tick_mortality_and_neglect(delta)
     if event_timer > 0.0:
         event_timer = maxf(0.0, event_timer - delta)
         for slime in all_present_slimes():
@@ -134,6 +139,98 @@ func tick(delta: float) -> void:
                 event_score += delta * 0.12
         if event_timer <= 0.0:
             _finish_event()
+
+func _tick_mortality_and_neglect(delta: float) -> void:
+    for slime in slimes:
+        if slime.life_state == "living" and mortality_enabled and slime.age_stage != "baby":
+            var danger := float(slime.needs.get("hunger", 100.0)) <= 0.0 or float(slime.needs.get("energy", 100.0)) <= 0.0
+            if danger:
+                slime.danger_timer += delta
+                if slime.danger_timer >= 45.0:
+                    slime.become_ghost()
+            else:
+                slime.danger_timer = maxf(0.0, slime.danger_timer - delta * 2.0)
+
+        if slime.age_stage == "baby":
+            var lowest := 100.0
+            for value in slime.needs.values():
+                lowest = minf(lowest, float(value))
+            var neglect := float(slime.routine_memory.get("neglect_seconds", 0.0))
+            if lowest < 5.0:
+                neglect += delta
+            else:
+                neglect = maxf(0.0, neglect - delta * 2.0)
+            if neglect >= 30.0:
+                neglect = 0.0
+                funds = maxi(0, funds - 150)
+                for key in slime.needs.keys():
+                    slime.needs[key] = maxf(float(slime.needs[key]), 65.0)
+                slime.add_moodlet("Emergency Nursery Visit", "Sad", 8.0, 24.0)
+                for caregiver in slimes:
+                    if caregiver != slime and caregiver.age_stage in ["young_adult", "adult"]:
+                        caregiver.add_moodlet("Baby Needed Emergency Care", "Embarrassed", 7.0, 24.0)
+            slime.routine_memory["neglect_seconds"] = neglect
+
+func family_tree_text(slime: SlimeAgent) -> String:
+    if slime == null:
+        return "No family data"
+    var parent_names: Array[String] = []
+    for parent_id in slime.parents:
+        var parent := get_any_slime(parent_id)
+        parent_names.append(parent.display_name if parent else "Unknown")
+    var child_names: Array[String] = []
+    for possible_child in slimes:
+        if possible_child.parents.has(slime.slime_id):
+            child_names.append(possible_child.display_name)
+    var parent_text := "None" if parent_names.is_empty() else ", ".join(parent_names)
+    var child_text := "None" if child_names.is_empty() else ", ".join(child_names)
+    return "Parents: %s · Children: %s" % [parent_text, child_text]
+
+func move_out(slime_id: String) -> bool:
+    var slime := get_slime(slime_id)
+    if slime == null or slimes.size() <= 1:
+        return false
+    inactive_households.append({
+        "name": "%s's Household" % slime.display_name,
+        "slimes": [slime.serialize()],
+        "funds": 500,
+    })
+    var index := slimes.find(slime)
+    if index >= 0:
+        slimes.remove_at(index)
+    if is_instance_valid(slime):
+        slime.queue_free()
+    if selected_id == slime_id:
+        selected_id = slimes[0].slime_id
+        select_slime(selected_id)
+    household_changed.emit()
+    return true
+
+func move_in_last() -> bool:
+    if inactive_households.is_empty():
+        return false
+    var source: Dictionary = inactive_households.pop_back()
+    var raw_slimes: Array = source.get("slimes", [])
+    if raw_slimes.is_empty():
+        return false
+    var raw: Dictionary = raw_slimes[0]
+    var restored_habits: Array[String] = []
+    for habit in raw.get("habits", []):
+        restored_habits.append(String(habit))
+    var color := Color.from_string(String(raw.get("color", "68d7ffff")), Color("68d7ff"))
+    var slime := add_slime(
+        String(raw.get("name", "Slime")),
+        color,
+        String(raw.get("age_stage", "adult")),
+        String(raw.get("personality", "Bubbly")),
+        restored_habits,
+        raw.get("appearance", {})
+    )
+    slime.slime_id = String(raw.get("id", slime.slime_id))
+    slime.restore(raw)
+    select_slime(slime.slime_id)
+    household_changed.emit()
+    return true
 
 func start_event(name_value: String, duration := 90.0) -> bool:
     if not event_name.is_empty():
@@ -453,6 +550,8 @@ func serialize() -> Dictionary:
         "event_name": event_name,
         "event_timer": event_timer,
         "event_score": event_score,
+        "mortality_enabled": mortality_enabled,
+        "inactive_households": inactive_households.duplicate(true),
     }
 
 func deserialize(data: Dictionary) -> void:
@@ -474,6 +573,8 @@ func deserialize(data: Dictionary) -> void:
     event_name = String(data.get("event_name", ""))
     event_timer = float(data.get("event_timer", 0.0))
     event_score = float(data.get("event_score", 0.0))
+    mortality_enabled = bool(data.get("mortality_enabled", false))
+    inactive_households = data.get("inactive_households", []).duplicate(true)
     for raw in data.get("slimes", []):
         var color := Color.from_string(String(raw.get("color", "68d7ffff")), Color("68d7ff"))
         var restored_habits: Array[String] = []
