@@ -56,6 +56,7 @@ func make_starter_home() -> void:
     _place_furniture(Vector2i(7, 2), "bath")
     _place_furniture(Vector2i(5, 6), "toy")
     _place_furniture(Vector2i(6, 5), "sofa")
+    set_cutaway_visible(true)
     changed.emit()
 
 func clear_house() -> void:
@@ -207,6 +208,7 @@ func deserialize(data: Dictionary) -> void:
     for item in data.get("furniture", []):
         var raw_cell: Array = item.get("cell", [0, 0])
         _place_furniture(Vector2i(int(raw_cell[0]), int(raw_cell[1])), String(item.get("type", "sofa")))
+    set_cutaway_visible(true)
     changed.emit()
 
 func _make_lot_ground() -> void:
@@ -422,3 +424,18 @@ func _wall_node_name(key: String) -> String:
 
 func _furniture_node_name(cell: Vector2i) -> String:
     return "Furniture_%d_%d" % [cell.x, cell.y]
+
+
+func set_cutaway_visible(enabled: bool) -> void:
+    # Hide the two exterior edges nearest the default isometric camera in Live mode.
+    # The walls remain in simulation/pathfinding; only their meshes are hidden.
+    for x in range(1, 10):
+        var south_key := _wall_key(Vector2i(x, 8), "N")
+        var south_node := wall_root.get_node_or_null(_wall_node_name(south_key))
+        if south_node:
+            south_node.visible = not enabled
+    for z in range(1, 8):
+        var west_key := _wall_key(Vector2i(1, z), "W")
+        var west_node := wall_root.get_node_or_null(_wall_node_name(west_key))
+        if west_node:
+            west_node.visible = not enabled
