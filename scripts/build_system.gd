@@ -6,7 +6,35 @@ signal changed
 const GRID_SIZE := Vector2i(12, 10)
 const CELL_SIZE := 1.35
 const WALL_HEIGHT := 1.75
-const FURNITURE_TYPES := ["bed", "food", "bath", "toy", "sofa"]
+const FURNITURE_TYPES := ["bed", "food", "bath", "toy", "sofa", "toilet", "sink", "stove", "fridge", "table", "lamp", "bookshelf", "desk", "plant", "rug", "dresser", "workbench"]
+const TOOL_COSTS := {
+    "floor": 8,
+    "wall": 12,
+    "door": 35,
+    "erase": 0,
+    "bed": 120,
+    "food": 140,
+    "bath": 180,
+    "toy": 55,
+    "sofa": 160,
+    "toilet": 120,
+    "sink": 90,
+    "stove": 240,
+    "fridge": 260,
+    "table": 110,
+    "lamp": 45,
+    "bookshelf": 130,
+    "desk": 150,
+    "plant": 35,
+    "rug": 40,
+    "dresser": 120,
+    "workbench": 260,
+}
+const TOOL_REFUNDS := {
+    "floor": 4,
+    "wall": 6,
+    "door": 18,
+}
 
 var floors: Dictionary = {}
 var walls: Dictionary = {}
@@ -56,6 +84,11 @@ func make_starter_home() -> void:
     _place_furniture(Vector2i(7, 2), "bath")
     _place_furniture(Vector2i(5, 6), "toy")
     _place_furniture(Vector2i(6, 5), "sofa")
+    _place_furniture(Vector2i(3, 2), "fridge")
+    _place_furniture(Vector2i(4, 2), "stove")
+    _place_furniture(Vector2i(8, 3), "toilet")
+    _place_furniture(Vector2i(7, 3), "sink")
+    _place_furniture(Vector2i(4, 6), "bookshelf")
     set_cutaway_visible(true)
     changed.emit()
 
@@ -69,6 +102,9 @@ func clear_house() -> void:
             for child in root.get_children():
                 child.free()
     changed.emit()
+
+func tool_cost(tool: String) -> int:
+    return int(TOOL_COSTS.get(tool, 0))
 
 func place(cell: Vector2i, tool: String, orientation: String = "N") -> bool:
     if not cell_in_bounds(cell):
@@ -313,7 +349,16 @@ func _place_furniture(cell: Vector2i, kind: String) -> void:
     node.position = cell_to_world(cell)
     furniture_root.add_child(node)
     _make_furniture_visual(node, kind)
-    furniture.append({"type": kind, "cell": [cell.x, cell.y]})
+    furniture.append({
+        "id": "%s_%d_%d_%d" % [kind, cell.x, cell.y, Time.get_ticks_msec()],
+        "type": kind,
+        "cell": [cell.x, cell.y],
+        "condition": 100.0,
+        "cleanliness": 100.0,
+        "quality": 1,
+        "owner_id": "",
+        "rotation": 0,
+    })
 
 func _make_furniture_visual(root: Node3D, kind: String) -> void:
     match kind:
@@ -331,6 +376,44 @@ func _make_furniture_visual(root: Node3D, kind: String) -> void:
         "sofa":
             _box(root, Vector3(1.12, 0.44, 0.82), Vector3(0, 0.24, 0), Color("527754"))
             _box(root, Vector3(1.10, 0.52, 0.20), Vector3(0, 0.64, 0.30), Color("456846"))
+        "toilet":
+            _box(root, Vector3(0.62, 0.42, 0.72), Vector3(0, 0.22, 0.08), Color("dce8e7"))
+            _box(root, Vector3(0.58, 0.62, 0.22), Vector3(0, 0.56, 0.30), Color("c9d9d8"))
+        "sink":
+            _box(root, Vector3(0.82, 0.74, 0.58), Vector3(0, 0.38, 0), Color("8fa9a5"))
+            _box(root, Vector3(0.74, 0.12, 0.54), Vector3(0, 0.80, 0), Color("dce8e7"))
+        "stove":
+            _box(root, Vector3(0.90, 0.86, 0.76), Vector3(0, 0.45, 0), Color("5f686c"))
+            _box(root, Vector3(0.76, 0.06, 0.64), Vector3(0, 0.91, 0), Color("272c2f"))
+        "fridge":
+            _box(root, Vector3(0.82, 1.42, 0.78), Vector3(0, 0.72, 0), Color("b8c8c6"))
+            _box(root, Vector3(0.04, 0.42, 0.04), Vector3(0.30, 0.85, -0.40), Color("4d595a"))
+        "table":
+            _box(root, Vector3(1.10, 0.12, 0.90), Vector3(0, 0.66, 0), Color("8a6a50"))
+            _box(root, Vector3(0.12, 0.62, 0.12), Vector3(-0.42, 0.32, -0.32), Color("6b513f"))
+            _box(root, Vector3(0.12, 0.62, 0.12), Vector3(0.42, 0.32, 0.32), Color("6b513f"))
+        "lamp":
+            _box(root, Vector3(0.18, 0.86, 0.18), Vector3(0, 0.44, 0), Color("5a4d42"))
+            _sphere(root, 0.30, Vector3(0, 0.98, 0), Color("ffd98a"))
+        "bookshelf":
+            _box(root, Vector3(1.02, 1.18, 0.30), Vector3(0, 0.60, 0), Color("66503f"))
+            _box(root, Vector3(0.84, 0.10, 0.34), Vector3(0, 0.42, -0.02), Color("d39b66"))
+            _box(root, Vector3(0.84, 0.10, 0.34), Vector3(0, 0.78, -0.02), Color("7894b4"))
+        "desk":
+            _box(root, Vector3(1.10, 0.12, 0.62), Vector3(0, 0.70, 0), Color("81624a"))
+            _box(root, Vector3(0.14, 0.66, 0.14), Vector3(-0.43, 0.34, 0.20), Color("66503f"))
+            _box(root, Vector3(0.14, 0.66, 0.14), Vector3(0.43, 0.34, 0.20), Color("66503f"))
+        "plant":
+            _box(root, Vector3(0.42, 0.30, 0.42), Vector3(0, 0.16, 0), Color("9c6c4f"))
+            _sphere(root, 0.34, Vector3(0, 0.62, 0), Color("4f8059"))
+        "rug":
+            _box(root, Vector3(1.18, 0.035, 1.02), Vector3(0, 0.04, 0), Color("a86d80"))
+        "dresser":
+            _box(root, Vector3(1.02, 0.88, 0.48), Vector3(0, 0.45, 0), Color("795a43"))
+        "workbench":
+            _box(root, Vector3(1.16, 0.14, 0.66), Vector3(0, 0.72, 0), Color("72563f"))
+            _box(root, Vector3(0.18, 0.70, 0.18), Vector3(-0.42, 0.36, 0.20), Color("55504a"))
+            _box(root, Vector3(0.18, 0.70, 0.18), Vector3(0.42, 0.36, 0.20), Color("55504a"))
 
 func _box(root: Node3D, size: Vector3, position: Vector3, color: Color) -> void:
     var m := MeshInstance3D.new()
@@ -350,6 +433,95 @@ func _sphere(root: Node3D, radius: float, position: Vector3, color: Color) -> vo
     m.position = position
     m.material_override = _material(color, 0.72)
     root.add_child(m)
+
+func tick_environment(delta: float) -> void:
+    for i in range(furniture.size()):
+        var item: Dictionary = furniture[i]
+        var item_type := String(item.get("type", ""))
+        var condition_loss := delta * (0.003 if item_type in ["bed", "sofa", "bookshelf", "rug", "plant"] else 0.008)
+        var dirt_loss := delta * (0.006 if item_type in ["bath", "toilet", "sink", "stove", "food"] else 0.002)
+        item["condition"] = maxf(0.0, float(item.get("condition", 100.0)) - condition_loss)
+        item["cleanliness"] = maxf(0.0, float(item.get("cleanliness", 100.0)) - dirt_loss)
+        furniture[i] = item
+
+func home_value() -> int:
+    var total := floors.size() * int(TOOL_COSTS["floor"])
+    total += walls.size() * int(TOOL_COSTS["wall"])
+    total += doors.size() * int(TOOL_COSTS["door"])
+    for item in furniture:
+        total += int(TOOL_COSTS.get(String(item.get("type", "")), 0))
+    return total
+
+func find_problem_object(problem: String, from_cell: Vector2i) -> Dictionary:
+    var best: Dictionary = {}
+    var best_distance := 999999
+    for item in furniture:
+        var qualifies := false
+        if problem == "dirty":
+            qualifies = float(item.get("cleanliness", 100.0)) < 45.0
+        elif problem == "broken":
+            qualifies = float(item.get("condition", 100.0)) < 35.0
+        if not qualifies:
+            continue
+        var raw: Array = item.get("cell", [0, 0])
+        var item_cell := Vector2i(int(raw[0]), int(raw[1]))
+        for candidate in _neighbors(item_cell):
+            if not is_walkable(candidate):
+                continue
+            var path := path_between(from_cell, candidate)
+            if not path.is_empty() and path.size() < best_distance:
+                best_distance = path.size()
+                best = {"item": item, "cell": candidate}
+    return best
+
+func clean_object(item_id: String, amount: float) -> void:
+    for i in range(furniture.size()):
+        if String(furniture[i].get("id", "")) == item_id:
+            var item: Dictionary = furniture[i]
+            item["cleanliness"] = clampf(float(item.get("cleanliness", 100.0)) + amount, 0.0, 100.0)
+            furniture[i] = item
+            return
+
+func repair_object(item_id: String, amount: float) -> void:
+    for i in range(furniture.size()):
+        if String(furniture[i].get("id", "")) == item_id:
+            var item: Dictionary = furniture[i]
+            item["condition"] = clampf(float(item.get("condition", 100.0)) + amount, 0.0, 100.0)
+            furniture[i] = item
+            return
+
+func claim_object(item_id: String, owner_id: String) -> void:
+    for i in range(furniture.size()):
+        if String(furniture[i].get("id", "")) == item_id:
+            var item: Dictionary = furniture[i]
+            item["owner_id"] = owner_id
+            furniture[i] = item
+            return
+
+func room_count() -> int:
+    var remaining: Dictionary = {}
+    for key in floors.keys():
+        remaining[key] = true
+    var count := 0
+    while not remaining.is_empty():
+        count += 1
+        var start_key := String(remaining.keys()[0])
+        var start := _key_to_cell(start_key)
+        var frontier: Array[Vector2i] = [start]
+        remaining.erase(start_key)
+        var head := 0
+        while head < frontier.size():
+            var current := frontier[head]
+            head += 1
+            for next_cell in _neighbors(current):
+                var next_key := _cell_key(next_cell)
+                if not remaining.has(next_key):
+                    continue
+                if _edge_blocked(current, next_cell):
+                    continue
+                remaining.erase(next_key)
+                frontier.append(next_cell)
+    return count
 
 func _erase_cell(cell: Vector2i) -> void:
     var floor_key := _cell_key(cell)
