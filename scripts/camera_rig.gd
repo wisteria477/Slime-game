@@ -3,8 +3,8 @@ extends Node3D
 
 var camera: Camera3D
 var yaw := -45.0
-var pitch := -55.0
-var ortho_size := 17.0
+var pitch := -48.0
+var ortho_size := 13.8
 var target := Vector3(6.7, 0.0, 5.4)
 
 func _ready() -> void:
@@ -14,6 +14,12 @@ func _ready() -> void:
     camera.projection = Camera3D.PROJECTION_ORTHOGONAL
     camera.size = ortho_size
     add_child(camera)
+    _update_camera()
+
+func set_phone_view(portrait: bool) -> void:
+    pitch = -46.0 if portrait else -48.0
+    ortho_size = 11.8 if portrait else 13.2
+    target = Vector3(6.7, 0.0, 5.4)
     _update_camera()
 
 func rotate_by(degrees: float) -> void:
