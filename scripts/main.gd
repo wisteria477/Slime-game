@@ -33,6 +33,13 @@ var needs_title: Label
 var needs_profile: Label
 var needs_toggle_button: Button
 var needs_expanded := false
+var urgent_label: Label
+var action_progress_bar: ProgressBar
+var action_queue_row: HBoxContainer
+var last_action_signature := ""
+var context_panel: PanelContainer
+var context_title: Label
+var context_box: VBoxContainer
 var build_button: Button
 var baby_button: Button
 var build_tray: PanelContainer
@@ -138,6 +145,7 @@ func _process(delta: float) -> void:
     _refresh_needs_values()
     _refresh_money()
     _refresh_life_panel()
+    _refresh_action_strip()
     _tick_status(delta)
 
 func _notification(what: int) -> void:
@@ -255,6 +263,7 @@ func _world_tap(screen_pos: Vector2) -> void:
             elif price > 0:
                 household.earn(price)
         return
+    _hide_context()
     if _select_slime_from_screen(screen_pos):
         return
     var selected := household.selected_slime()
@@ -262,6 +271,10 @@ func _world_tap(screen_pos: Vector2) -> void:
         var world = camera_rig.screen_to_ground(screen_pos)
         if world != null:
             var cell := build_system.world_to_cell(world)
+            var item := build_system.furniture_at_cell(cell)
+            if not item.is_empty():
+                _show_object_context(item, screen_pos)
+                return
             if build_system.is_walkable(cell):
                 selected.command_move(cell)
                 _status("%s is going there" % selected.display_name)
@@ -280,9 +293,14 @@ func _select_slime_from_screen(screen_pos: Vector2) -> bool:
         return false
     var collider = hit.get("collider")
     if collider is SlimeAgent:
-        household.select_slime(collider.slime_id)
-        camera_rig.focus_on(collider.global_position)
-        _status(collider.display_name)
+        var tapped := collider as SlimeAgent
+        var selected := household.selected_slime()
+        if selected != null and tapped != selected:
+            _show_slime_context(tapped, screen_pos)
+        else:
+            household.select_slime(tapped.slime_id)
+            camera_rig.focus_on(tapped.global_position)
+            _show_slime_context(tapped, screen_pos)
         return true
     return false
 
@@ -330,15 +348,15 @@ func _apply_responsive_layout() -> void:
     day_button.custom_minimum_size = Vector2(230, 68) if portrait else Vector2(210, 62)
     day_button.position = Vector2(18, 18)
 
-    family_panel.offset_left = -520 if portrait else -500
+    family_panel.offset_left = -360 if portrait else -390
     family_panel.offset_right = -18
     family_panel.offset_top = 18
-    family_panel.offset_bottom = 88 if portrait else 88
+    family_panel.offset_bottom = 82 if portrait else 84
 
     money_label.offset_left = -250 if portrait else -220
     money_label.offset_right = 250 if portrait else 220
-    money_label.offset_top = 96 if portrait else 24
-    money_label.offset_bottom = 136 if portrait else 64
+    money_label.offset_top = 88 if portrait else 24
+    money_label.offset_bottom = 126 if portrait else 64
     money_label.add_theme_font_size_override("font_size", 18 if portrait else 20)
 
     needs_panel.offset_left = 24 if portrait else 180
@@ -486,6 +504,35 @@ func _build_ui() -> void:
     needs_profile.add_theme_font_size_override("font_size", 15)
     needs_profile.add_theme_color_override("font_color", Color("24474c"))
     needs_box.add_child(needs_profile)
+
+    urgent_label = Label.new()
+    urgent_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    urgent_label.add_theme_font_size_override("font_size", 15)
+    urgent_label.add_theme_color_override("font_color", Color("7a2c35"))
+    urgent_label.visible = false
+    needs_box.add_child(urgent_label)
+
+    action_progress_bar = ProgressBar.new()
+    action_progress_bar.min_value = 0
+    action_progress_bar.max_value = 100
+    action_progress_bar.show_percentage = false
+    action_progress_bar.custom_minimum_size = Vector2(0, 8)
+    needs_box.add_child(action_progress_bar)
+
+    action_queue_row = HBoxContainer.new()
+    action_queue_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    action_queue_row.add_theme_constant_override("separation", 5)
+    needs_box.add_child(action_queue_row)
+
+    var speed_row := HBoxContainer.new()
+    speed_row.alignment = BoxContainer.ALIGNMENT_CENTER
+    speed_row.add_theme_constant_override("separation", 5)
+    needs_box.add_child(speed_row)
+    for speed_data in [["Ⅱ", 0.0], ["▶", 1.0], ["▶▶", 2.0], ["▶▶▶", 3.0]]:
+        var speed_button := _button(String(speed_data[0]), _set_speed.bind(float(speed_data[1])), Vector2(72, 38))
+        speed_button.add_theme_font_size_override("font_size", 15)
+        speed_row.add_child(speed_button)
+
     needs_row = GridContainer.new()
     needs_row.columns = 4
     needs_row.visible = false
@@ -544,6 +591,21 @@ func _build_ui() -> void:
     status_label.add_theme_font_size_override("font_size", 20)
     status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     root_ui.add_child(status_label)
+
+    context_panel = PanelContainer.new()
+    context_panel.custom_minimum_size = Vector2(250, 0)
+    context_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.88, 0.96, 0.94, 0.985), 24))
+    context_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+    context_panel.visible = false
+    root_ui.add_child(context_panel)
+    context_box = VBoxContainer.new()
+    context_box.add_theme_constant_override("separation", 5)
+    context_panel.add_child(context_box)
+    context_title = _label("Interact")
+    context_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    context_title.add_theme_font_size_override("font_size", 20)
+    context_box.add_child(context_title)
+
     _refresh_family()
     _refresh_needs_panel()
 
@@ -1433,10 +1495,16 @@ func _cycle_speed() -> void:
         sim_speed = 0.0
     _status("Paused" if sim_speed == 0.0 else "%dx speed" % int(sim_speed))
 
+func _set_speed(value: float) -> void:
+    sim_speed = value
+    _status("Paused" if sim_speed == 0.0 else "%dx speed" % int(sim_speed))
+
 func _refresh_money() -> void:
     if money_label == null:
         return
-    money_label.text = "◉ %d   ·   Bills %d   ·   %s" % [household.funds, household.bills_due, household.current_lot]
+    money_label.text = "◉ %d" % household.funds
+    if household.bills_due > 0:
+        money_label.text += "   •   Bills %d" % household.bills_due
 
 func _refresh_clock() -> void:
     if day_button == null:
@@ -1460,18 +1528,29 @@ func _refresh_family() -> void:
         return
     for child in family_row.get_children():
         child.queue_free()
-    var title := _label("MY SLIMES")
-    title.custom_minimum_size = Vector2(88, 44)
+    var title := _label("FAMILY")
+    title.custom_minimum_size = Vector2(66, 44)
     title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    title.add_theme_font_size_override("font_size", 14)
     family_row.add_child(title)
     for slime in household.slimes:
         var id_value := slime.slime_id
-        var prefix := "• " if slime.age_stage == "baby" else ""
-        var button := _button(prefix + slime.display_name, _select_and_focus.bind(id_value), Vector2(76, 44))
-        button.modulate = slime.slime_color.lightened(0.22)
+        var selected := id_value == household.selected_id
+        var symbol := "◉" if selected else "●"
+        if slime.age_stage == "baby":
+            symbol = "◌" if not selected else "◎"
+        var button := _button(symbol, _select_and_focus.bind(id_value), Vector2(50, 44))
+        button.tooltip_text = slime.display_name
+        button.add_theme_font_size_override("font_size", 27)
+        button.add_theme_color_override("font_color", slime.slime_color.lightened(0.08))
+        if selected:
+            button.add_theme_stylebox_override("normal", _panel_style(Color(0.92, 0.98, 0.95, 1.0), 18))
         family_row.add_child(button)
-    family_row.add_child(_button("+", _open_creator, Vector2(48, 44)))
-    baby_button = _button("BABY", _open_baby, Vector2(70, 44))
+    var add_button := _button("+", _open_creator, Vector2(48, 44))
+    add_button.tooltip_text = "Add slime"
+    family_row.add_child(add_button)
+    baby_button = _button("♥", _open_baby, Vector2(48, 44))
+    baby_button.tooltip_text = "Have a baby slime"
     baby_button.disabled = household.adult_slimes().size() < 2
     family_row.add_child(baby_button)
 
@@ -1529,6 +1608,167 @@ func _refresh_needs_values() -> void:
         var bar := needs_row.find_child("Need_%s" % key, true, false)
         if bar is ProgressBar:
             bar.value = float(slime.needs.get(key, 0.0))
+
+func _urgent_need_text(slime: SlimeAgent) -> String:
+    var labels := {
+        "hunger": "Hungry",
+        "energy": "Exhausted",
+        "hygiene": "Needs a bath",
+        "fun": "Needs fun",
+        "social": "Lonely",
+        "comfort": "Uncomfortable",
+        "bladder": "Needs bathroom",
+    }
+    var urgent: Array[String] = []
+    for key in NEEDS:
+        var value := float(slime.needs.get(key, 100.0))
+        if value <= 22.0:
+            urgent.append(String(labels.get(key, key.capitalize())))
+    return " • ".join(urgent)
+
+func _refresh_action_strip() -> void:
+    if action_queue_row == null or action_progress_bar == null:
+        return
+    var slime := household.selected_slime()
+    if slime == null:
+        return
+
+    var urgent := _urgent_need_text(slime)
+    urgent_label.visible = not urgent.is_empty()
+    urgent_label.text = "⚠ " + urgent if not urgent.is_empty() else ""
+
+    action_progress_bar.value = slime.action_progress() * 100.0
+    action_progress_bar.visible = not slime.action_kind.is_empty()
+
+    var queue := slime.player_queue_text()
+    var signature := "%s|%s|%s|%s" % [slime.action_kind, JSON.stringify(queue), slime.emotion, urgent]
+    if signature == last_action_signature:
+        return
+    last_action_signature = signature
+    for child in action_queue_row.get_children():
+        child.queue_free()
+
+    if not slime.action_kind.is_empty():
+        var current_button := _button("✕ " + slime._action_label(slime.action_kind), _cancel_selected_action, Vector2(150, 36))
+        current_button.add_theme_font_size_override("font_size", 13)
+        action_queue_row.add_child(current_button)
+    var queued_index := 0
+    for entry in slime.player_queue:
+        if queued_index >= 3:
+            break
+        var label := slime._action_label(String(entry.get("action", "")))
+        var queue_button := _button("%d %s" % [queued_index + 1, label], _remove_selected_queue.bind(queued_index), Vector2(128, 36))
+        queue_button.add_theme_font_size_override("font_size", 12)
+        action_queue_row.add_child(queue_button)
+        queued_index += 1
+
+func _cancel_selected_action() -> void:
+    var slime := household.selected_slime()
+    if slime:
+        slime.cancel_current_action(false)
+        last_action_signature = ""
+        _status("Cancelled current action")
+
+func _remove_selected_queue(index: int) -> void:
+    var slime := household.selected_slime()
+    if slime:
+        slime.remove_queued_action(index)
+        last_action_signature = ""
+        _status("Removed queued action")
+
+func _hide_context() -> void:
+    if context_panel:
+        context_panel.visible = false
+
+func _place_context(screen_pos: Vector2) -> void:
+    var viewport := get_viewport().get_visible_rect().size
+    var width := 270.0
+    var estimated_height := maxf(140.0, float(context_box.get_child_count()) * 48.0)
+    context_panel.position = Vector2(
+        clampf(screen_pos.x - width * 0.5, 12.0, maxf(12.0, viewport.x - width - 12.0)),
+        clampf(screen_pos.y - 35.0, 92.0, maxf(92.0, viewport.y - estimated_height - 24.0))
+    )
+
+func _clear_context_buttons() -> void:
+    if context_box == null:
+        return
+    for i in range(context_box.get_child_count() - 1, 0, -1):
+        context_box.get_child(i).queue_free()
+
+func _show_object_context(item: Dictionary, screen_pos: Vector2) -> void:
+    var selected := household.selected_slime()
+    if selected == null:
+        return
+    _clear_context_buttons()
+    var kind := String(item.get("type", "object"))
+    context_title.text = kind.capitalize()
+    var options := build_system.interaction_options_for_type(kind)
+    for option in options:
+        var label := String(option.get("label", "Use"))
+        var action := String(option.get("action", ""))
+        context_box.add_child(_button(label, _queue_object_interaction.bind(action, item), Vector2(230, 44)))
+    if options.is_empty():
+        context_box.add_child(_button("Go Here", _go_near_object.bind(item), Vector2(230, 44)))
+    context_panel.visible = true
+    _place_context(screen_pos)
+
+func _queue_object_interaction(action: String, item: Dictionary) -> void:
+    var slime := household.selected_slime()
+    if slime == null:
+        return
+    var target_cell := build_system.interaction_target_for_item(item, slime.current_cell())
+    var kind := String(item.get("type", ""))
+    if action == "hobby":
+        match kind:
+            "workbench":
+                slime.favorite_hobby = "Tinkering"
+            "bookshelf":
+                slime.favorite_hobby = "Reading"
+            "desk":
+                slime.favorite_hobby = "Creative Project"
+            "toy":
+                slime.favorite_hobby = "Toy Design"
+    slime.queue_interaction(action, String(item.get("id", "")), target_cell)
+    _hide_context()
+    last_action_signature = ""
+    _status("Queued: %s" % slime._action_label(action))
+
+func _go_near_object(item: Dictionary) -> void:
+    var slime := household.selected_slime()
+    if slime:
+        slime.command_move(build_system.interaction_target_for_item(item, slime.current_cell()))
+    _hide_context()
+
+func _show_slime_context(target: SlimeAgent, screen_pos: Vector2) -> void:
+    _clear_context_buttons()
+    context_title.text = "%s • %s" % [target.display_name, target.emotion]
+    var selected := household.selected_slime()
+    if target in household.slimes and target != selected:
+        context_box.add_child(_button("Control %s" % target.display_name, _context_select_slime.bind(target.slime_id), Vector2(230, 44)))
+    if selected != null and target != selected:
+        for interaction in ["Chat", "Joke", "Compliment", "Hug", "Flirt", "Argue"]:
+            context_box.add_child(_button(interaction, _queue_social_interaction.bind(target.slime_id, interaction), Vector2(230, 42)))
+    elif selected == target:
+        context_box.add_child(_button("Open Profile", _open_life_panel, Vector2(230, 44)))
+        if not selected.action_kind.is_empty():
+            context_box.add_child(_button("Cancel Current Action", _cancel_selected_action, Vector2(230, 44)))
+    context_panel.visible = true
+    _place_context(screen_pos)
+
+func _context_select_slime(id_value: String) -> void:
+    _select_and_focus(id_value)
+    _hide_context()
+
+func _queue_social_interaction(target_id: String, interaction: String) -> void:
+    var selected := household.selected_slime()
+    var target := household.get_any_slime(target_id)
+    if selected == null or target == null:
+        return
+    household.social_interact(selected.slime_id, target_id, interaction)
+    selected.queue_interaction("social", "", target.current_cell(), target_id)
+    _hide_context()
+    last_action_signature = ""
+    _status("%s queued with %s" % [interaction, target.display_name])
 
 func save_game(show_message := true) -> void:
     if build_system == null or household == null:
