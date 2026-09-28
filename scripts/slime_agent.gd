@@ -124,9 +124,9 @@ func _build_character() -> void:
     add_child(visual_root)
 
     if ResourceLoader.exists(MODEL_PATH):
-        var packed = load(MODEL_PATH)
+        var packed: Resource = load(MODEL_PATH)
         if packed is PackedScene:
-            var model := packed.instantiate()
+            var model: Node = (packed as PackedScene).instantiate()
             model.name = "NimModel"
             model.scale = Vector3.ONE * 0.43
             model.rotation_degrees.y = 180.0
@@ -290,14 +290,14 @@ func _seek_need(key: String) -> void:
             _set_path_to(other.current_cell())
             state_label.text = "Chat"
             return
-    var furniture_kind := {
+    var furniture_kind: String = String({
         "hunger": "food",
         "energy": "bed",
         "hygiene": "bath",
         "fun": "toy",
         "comfort": "sofa",
-    }.get(key, "")
-    if String(furniture_kind).is_empty():
+    }.get(key, ""))
+    if furniture_kind.is_empty():
         return
     var target: Dictionary = build_system.find_furniture(furniture_kind, current_cell())
     if target.is_empty():
