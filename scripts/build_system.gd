@@ -295,7 +295,18 @@ func deserialize(data: Dictionary) -> void:
         _place_wall(Vector2i(int(raw[0]), int(raw[1])), String(raw[2]), true)
     for item in data.get("furniture", []):
         var raw_cell: Array = item.get("cell", [0, 0])
-        _place_furniture(Vector2i(int(raw_cell[0]), int(raw_cell[1])), String(item.get("type", "sofa")))
+        var restored_cell := Vector2i(int(raw_cell[0]), int(raw_cell[1]))
+        _place_furniture(restored_cell, String(item.get("type", "sofa")))
+        for i in range(furniture.size() - 1, -1, -1):
+            var created_raw: Array = furniture[i].get("cell", [0, 0])
+            if Vector2i(int(created_raw[0]), int(created_raw[1])) == restored_cell:
+                furniture[i]["id"] = String(item.get("id", furniture[i].get("id", "")))
+                furniture[i]["condition"] = float(item.get("condition", 100.0))
+                furniture[i]["cleanliness"] = float(item.get("cleanliness", 100.0))
+                furniture[i]["quality"] = int(item.get("quality", 1))
+                furniture[i]["owner_id"] = String(item.get("owner_id", ""))
+                furniture[i]["rotation"] = int(item.get("rotation", 0))
+                break
     for item in data.get("windows", []):
         var raw_window: Array = item.get("cell", [0, 0])
         _place_window(Vector2i(int(raw_window[0]), int(raw_window[1])), String(item.get("orientation", "N")))
@@ -617,7 +628,7 @@ func tick_environment(delta: float) -> void:
         var item: Dictionary = furniture[i]
         var item_type := String(item.get("type", ""))
         var condition_loss := delta * (0.003 if item_type in ["bed", "sofa", "bookshelf", "rug", "plant"] else 0.008)
-        var dirt_loss := delta * (0.006 if item_type in ["bath", "toilet", "sink", "stove", "food"] else 0.002)
+        var dirt_loss := delta * (0.020 if item_type in ["bath", "toilet", "sink", "stove", "food", "fridge"] else 0.006)
         item["condition"] = maxf(0.0, float(item.get("condition", 100.0)) - condition_loss)
         item["cleanliness"] = maxf(0.0, float(item.get("cleanliness", 100.0)) - dirt_loss)
         furniture[i] = item
@@ -636,7 +647,7 @@ func find_problem_object(problem: String, from_cell: Vector2i) -> Dictionary:
     for item in furniture:
         var qualifies := false
         if problem == "dirty":
-            qualifies = float(item.get("cleanliness", 100.0)) < 68.0
+            qualifies = float(item.get("cleanliness", 100.0)) < 78.0
         elif problem == "broken":
             qualifies = float(item.get("condition", 100.0)) < 35.0
         if not qualifies:
