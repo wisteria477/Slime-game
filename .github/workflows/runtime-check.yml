@@ -18,6 +18,22 @@ jobs:
           mv Godot_v4.7.2-stable_linux.x86_64 godot
           chmod +x godot
       - name: Parse and import project
-        run: ./godot --headless --editor --path . --quit
+        run: |
+          set -o pipefail
+          ./godot --headless --editor --path . --quit 2>&1 | tee godot-import.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|Failed to load script" godot-import.log; then
+            echo "Godot script/import errors detected"
+            exit 1
+          fi
       - name: Boot game for smoke test
-        run: timeout 12s ./godot --headless --path . --quit-after 3 || test $? -eq 124
+        run: |
+          set -o pipefail
+          code=0
+          timeout 12s ./godot --headless --path . --quit-after 3 2>&1 | tee godot-boot.log || code=$?
+          if [ "$code" -ne 0 ] && [ "$code" -ne 124 ]; then
+            exit "$code"
+          fi
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|Failed to load script" godot-boot.log; then
+            echo "Godot runtime script errors detected"
+            exit 1
+          fi
