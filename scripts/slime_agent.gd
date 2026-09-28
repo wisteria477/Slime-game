@@ -378,19 +378,70 @@ func _animate_idle() -> void:
         pulse_strength = 0.012
     elif action_kind == "social":
         pulse_strength = 0.05
+
     var pulse := sin(now) * pulse_strength
+    visual_root.position = Vector3.ZERO
+    visual_root.rotation.x = 0.0
+    visual_root.rotation.z = 0.0
     visual_root.scale = Vector3(
         base_visual_scale.x * (1.0 - pulse * 0.35),
         base_visual_scale.y * (1.0 + pulse),
         base_visual_scale.z * (1.0 - pulse * 0.35)
     )
-    var lean := 0.0
-    if action_kind == "fun":
-        lean = sin(now * 1.7) * 0.11
-    elif action_kind == "social":
-        lean = sin(now * 1.25) * 0.055
-    visual_root.rotation.z = lean
+
+    if not action_kind.is_empty() and path.is_empty():
+        _animate_current_action(now)
+
     _update_expression_visual()
+
+func _animate_current_action(now: float) -> void:
+    var beat := sin(now * 1.55)
+    var quick := sin(now * 2.8)
+    match action_kind:
+        "energy":
+            visual_root.scale.x *= 1.20
+            visual_root.scale.y *= 0.58
+            visual_root.scale.z *= 1.12
+            visual_root.position.y = 0.03 + sin(now * 0.45) * 0.01
+            visual_root.rotation.z = sin(now * 0.42) * 0.025
+        "hunger":
+            visual_root.position.y = maxf(0.0, beat) * 0.07
+            visual_root.rotation.x = deg_to_rad(-6.0 + quick * 2.5)
+            visual_root.scale.y *= 1.0 + maxf(0.0, quick) * 0.035
+        "hygiene":
+            visual_root.position.x = quick * 0.045
+            visual_root.rotation.z = quick * 0.07
+            visual_root.scale.x *= 1.0 + absf(quick) * 0.025
+        "fun":
+            var hop := maxf(0.0, sin(now * 2.2))
+            visual_root.position.y = hop * 0.20
+            visual_root.rotation.z = sin(now * 1.4) * 0.14
+            if hop < 0.12:
+                visual_root.scale.x *= 1.08
+                visual_root.scale.y *= 0.92
+                visual_root.scale.z *= 1.08
+        "social":
+            visual_root.position.y = maxf(0.0, beat) * 0.055
+            visual_root.rotation.z = sin(now * 1.25) * 0.075
+        "comfort":
+            visual_root.scale.x *= 1.12
+            visual_root.scale.y *= 0.84
+            visual_root.scale.z *= 1.08
+            visual_root.position.y = 0.02
+        "bladder":
+            visual_root.position.x = sin(now * 2.5) * 0.025
+            visual_root.scale.y *= 0.97 + absf(quick) * 0.025
+        "clean_object":
+            visual_root.rotation.x = sin(now * 1.9) * 0.16
+            visual_root.position.x = sin(now * 2.4) * 0.05
+        "repair_object":
+            visual_root.rotation.z = sin(now * 2.0) * 0.12
+            visual_root.position.y = maxf(0.0, quick) * 0.045
+        "care_baby":
+            visual_root.position.y = maxf(0.0, beat) * 0.045
+            visual_root.rotation.z = sin(now * 0.9) * 0.045
+        _:
+            pass
 
 func _apply_appearance() -> void:
     if visual_root == null:
