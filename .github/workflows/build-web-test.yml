@@ -91,6 +91,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout --orphan gh-pages
           git rm -rf . >/dev/null 2>&1 || true
+          git clean -fdx
           cp -R /tmp/slime-life-web/. .
           git add -A
           git commit -m "Publish phone web test for ${GITHUB_SHA}"
