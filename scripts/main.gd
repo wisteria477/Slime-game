@@ -15,6 +15,7 @@ const HABITS := ["Snacky", "Napper", "Tidy Routine", "Toy Lover", "Chatty", "Coz
 const TAP_SLOP := 16.0
 
 var build_system: SlimeBuildSystem
+var audio_manager: SlimeAudio
 var household: SlimeHousehold
 var camera_rig: SlimeCameraRig
 var slime_root: Node3D
@@ -77,6 +78,9 @@ var last_viewport_size := Vector2.ZERO
 func _ready() -> void:
     Engine.max_fps = 60
     _make_environment()
+    audio_manager = SlimeAudio.new()
+    audio_manager.name = "Audio"
+    add_child(audio_manager)
     build_system = SlimeBuildSystem.new()
     build_system.name = "BuildSystem"
     add_child(build_system)
@@ -227,6 +231,7 @@ func _world_tap(screen_pos: Vector2) -> void:
                 _status("Not enough puddle coins — need %d" % price)
                 return
             if build_system.place(cell, selected_tool, wall_orientation):
+                audio_manager.build_place()
                 _status("Placed %s · -%d" % [selected_tool, price])
                 save_game(false)
             elif price > 0:
@@ -547,6 +552,8 @@ func _build_life_panel() -> void:
 
     controls.add_child(_button("DO SOCIAL", _do_social, Vector2(240, 54)))
     controls.add_child(_button("PUDDLE PARTY", _start_party, Vector2(240, 54)))
+    controls.add_child(_button("MUSIC", _toggle_music, Vector2(240, 54)))
+    controls.add_child(_button("SFX", _toggle_sfx, Vector2(240, 54)))
     controls.add_child(_button("MORTALITY", _toggle_mortality, Vector2(240, 54)))
     controls.add_child(_button("MOVE OUT", _move_out_selected, Vector2(240, 54)))
     controls.add_child(_button("MOVE IN LAST", _move_in_last, Vector2(240, 54)))
@@ -737,6 +744,7 @@ func _do_social() -> void:
     var target_id := String(social_target.get_item_metadata(social_target.selected))
     var interaction := social_action.get_item_text(maxi(social_action.selected, 0))
     if household.social_interact(selected.slime_id, target_id, interaction):
+        audio_manager.social()
         var target := household.get_any_slime(target_id)
         _status("%s: %s with %s" % [selected.display_name, interaction, target.display_name if target else "slime"])
     _refresh_life_panel()
@@ -748,6 +756,18 @@ func _start_party() -> void:
     else:
         _status("An event is already running")
     _refresh_life_panel()
+
+func _toggle_music() -> void:
+    if audio_manager == null:
+        return
+    audio_manager.set_music_enabled(not audio_manager.music_enabled)
+    _status("Music %s" % ("on" if audio_manager.music_enabled else "off"))
+
+func _toggle_sfx() -> void:
+    if audio_manager == null:
+        return
+    audio_manager.set_sfx_enabled(not audio_manager.sfx_enabled)
+    _status("Sound effects %s" % ("on" if audio_manager.sfx_enabled else "off"))
 
 func _toggle_mortality() -> void:
     household.mortality_enabled = not household.mortality_enabled
@@ -1167,6 +1187,7 @@ func _confirm_creator() -> void:
         chosen_appearance
     )
     household.select_slime(slime.slime_id)
+    audio_manager.positive()
     creator_overlay.visible = false
     _status("%s joined the house — %s" % [slime.display_name, slime.profile_text()])
     save_game(false)
@@ -1202,6 +1223,7 @@ func _confirm_baby() -> void:
     var baby := household.add_baby(a_id, b_id, baby_name.text)
     if baby:
         household.select_slime(baby.slime_id)
+        audio_manager.baby()
         baby_overlay.visible = false
         _status("%s was born" % baby.display_name)
         save_game(false)
@@ -1386,6 +1408,8 @@ func _button(text_value: String, callback: Callable, size := Vector2(90, 48)) ->
     button.add_theme_stylebox_override("hover", _panel_style(Color(0.86, 0.95, 0.93, 1.0), 16))
     button.add_theme_stylebox_override("pressed", _panel_style(Color(0.58, 0.78, 0.75, 1.0), 16))
     button.pressed.connect(callback)
+    if audio_manager:
+        button.pressed.connect(audio_manager.ui_click)
     return button
 
 func _label(text_value: String) -> Label:
