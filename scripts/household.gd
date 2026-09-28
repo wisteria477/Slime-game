@@ -16,6 +16,7 @@ var household_inventory: Array[Dictionary] = []
 var achievements: Array[String] = []
 var unlocks: Array[String] = []
 var current_lot := "Home"
+var lot_builds: Dictionary = {}
 var relationship_events: Array[Dictionary] = []
 var last_schedule_key := ""
 var rng := RandomNumberGenerator.new()
@@ -38,7 +39,9 @@ func clear() -> void:
     household_inventory.clear()
     achievements.clear()
     unlocks.clear()
+    lot_builds.clear()
     relationship_events.clear()
+    current_lot = "Home"
     household_changed.emit()
     selection_changed.emit(null)
 
@@ -346,6 +349,7 @@ func serialize() -> Dictionary:
         "achievements": achievements.duplicate(),
         "unlocks": unlocks.duplicate(),
         "current_lot": current_lot,
+        "lot_builds": lot_builds.duplicate(true),
         "relationship_events": relationship_events.duplicate(true),
     }
 
@@ -363,6 +367,7 @@ func deserialize(data: Dictionary) -> void:
     for unlock in data.get("unlocks", []):
         unlocks.append(String(unlock))
     current_lot = String(data.get("current_lot", "Home"))
+    lot_builds = data.get("lot_builds", {}).duplicate(true)
     relationship_events = data.get("relationship_events", []).duplicate(true)
     for raw in data.get("slimes", []):
         var color := Color.from_string(String(raw.get("color", "68d7ffff")), Color("68d7ff"))
