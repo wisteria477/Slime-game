@@ -22,7 +22,7 @@ func _ready() -> void:
 
 func set_phone_view(portrait: bool) -> void:
     home_pitch = -46.0 if portrait else -48.0
-    home_size = 11.8 if portrait else 13.2
+    home_size = 10.2 if portrait else 11.8
     pitch = home_pitch
     ortho_size = home_size
     home_target = Vector3(6.7, 0.0, 5.4)
