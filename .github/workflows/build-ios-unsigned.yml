@@ -2,16 +2,6 @@ name: Build iPhone IPA (unsigned)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "project.godot"
-      - "export_presets.cfg"
-      - "scenes/**"
-      - "scripts/**"
-      - "assets/**"
-      - "ci/**"
-      - ".github/workflows/build-ios-unsigned.yml"
 
 permissions:
   contents: read
