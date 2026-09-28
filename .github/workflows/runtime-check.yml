@@ -39,3 +39,13 @@ jobs:
             echo "Godot runtime script errors detected"
             exit 1
           fi
+
+      - name: Exercise household life loop
+        run: |
+          set -o pipefail
+          ./godot --headless --path . --script ci/life_loop_smoke.gd 2>&1 | tee life-loop.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|LIFE LOOP TEST" life-loop.log; then
+            echo "Household life-loop test failed"
+            exit 1
+          fi
+          grep -q "SLIME LIFE LIFE-LOOP SMOKE PASSED" life-loop.log
