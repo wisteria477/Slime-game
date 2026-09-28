@@ -48,6 +48,7 @@ var floor_root: Node3D
 var wall_root: Node3D
 var furniture_root: Node3D
 var lot_root: Node3D
+var context_root: Node3D
 var roof_root: Node3D
 var roof_enabled := false
 var windows: Array[Dictionary] = []
@@ -56,6 +57,11 @@ var platforms: Array[Dictionary] = []
 var current_build_level := 0
 
 func _ready() -> void:
+    context_root = Node3D.new()
+    context_root.name = "NeighborhoodContext"
+    add_child(context_root)
+    _make_lot_context()
+
     lot_root = Node3D.new()
     lot_root.name = "House"
     add_child(lot_root)
@@ -387,14 +393,71 @@ func deserialize(data: Dictionary) -> void:
     set_cutaway_visible(true)
     changed.emit()
 
+func _make_lot_context() -> void:
+    var world_ground := MeshInstance3D.new()
+    world_ground.name = "WorldGround"
+    var world_mesh := BoxMesh.new()
+    world_mesh.size = Vector3(46.0, 0.12, 42.0)
+    world_ground.mesh = world_mesh
+    world_ground.position = Vector3((GRID_SIZE.x - 1) * CELL_SIZE * 0.5, -0.24, (GRID_SIZE.y - 1) * CELL_SIZE * 0.5)
+    world_ground.material_override = _material(Color("6f8a72"), 0.98)
+    context_root.add_child(world_ground)
+
+    var road := MeshInstance3D.new()
+    road.name = "Road"
+    var road_mesh := BoxMesh.new()
+    road_mesh.size = Vector3(38.0, 0.06, 4.6)
+    road.mesh = road_mesh
+    road.position = Vector3((GRID_SIZE.x - 1) * CELL_SIZE * 0.5, -0.14, GRID_SIZE.y * CELL_SIZE + 5.0)
+    road.material_override = _material(Color("4d5456"), 0.98)
+    context_root.add_child(road)
+
+    var sidewalk := MeshInstance3D.new()
+    sidewalk.name = "Sidewalk"
+    var sidewalk_mesh := BoxMesh.new()
+    sidewalk_mesh.size = Vector3(38.0, 0.08, 1.25)
+    sidewalk.mesh = sidewalk_mesh
+    sidewalk.position = Vector3((GRID_SIZE.x - 1) * CELL_SIZE * 0.5, -0.08, GRID_SIZE.y * CELL_SIZE + 2.25)
+    sidewalk.material_override = _material(Color("b5b0a5"), 0.94)
+    context_root.add_child(sidewalk)
+
+    var path := MeshInstance3D.new()
+    path.name = "FrontPath"
+    var path_mesh := BoxMesh.new()
+    path_mesh.size = Vector3(1.4, 0.06, 5.2)
+    path.mesh = path_mesh
+    path.position = Vector3(5.0 * CELL_SIZE, -0.035, GRID_SIZE.y * CELL_SIZE - 0.35)
+    path.material_override = _material(Color("b9a78d"), 0.92)
+    context_root.add_child(path)
+
+    var tree_positions := [
+        Vector3(-3.0, 0.0, 2.0),
+        Vector3(19.0, 0.0, 3.0),
+        Vector3(-2.5, 0.0, 13.5),
+        Vector3(19.5, 0.0, 14.0),
+        Vector3(1.0, 0.0, -3.0),
+        Vector3(16.5, 0.0, -2.5),
+    ]
+    for position_value in tree_positions:
+        _make_context_tree(position_value)
+
+func _make_context_tree(position_value: Vector3) -> void:
+    var root := Node3D.new()
+    root.position = position_value
+    context_root.add_child(root)
+    _box(root, Vector3(0.34, 1.4, 0.34), Vector3(0, 0.70, 0), Color("6b513f"))
+    _sphere(root, 0.95, Vector3(0, 1.75, 0), Color("4f7754"))
+    _sphere(root, 0.68, Vector3(0.52, 1.62, 0.18), Color("5e865e"))
+    _sphere(root, 0.62, Vector3(-0.48, 1.58, -0.12), Color("5a8059"))
+
 func _make_lot_ground() -> void:
     var ground := MeshInstance3D.new()
     ground.name = "LotGround"
     var mesh := BoxMesh.new()
-    mesh.size = Vector3(GRID_SIZE.x * CELL_SIZE + 2.4, 0.12, GRID_SIZE.y * CELL_SIZE + 2.4)
+    mesh.size = Vector3(GRID_SIZE.x * CELL_SIZE + 2.4, 0.07, GRID_SIZE.y * CELL_SIZE + 2.4)
     ground.mesh = mesh
-    ground.position = Vector3((GRID_SIZE.x - 1) * CELL_SIZE * 0.5, -0.08, (GRID_SIZE.y - 1) * CELL_SIZE * 0.5)
-    ground.material_override = _material(Color("55745f"), 0.96)
+    ground.position = Vector3((GRID_SIZE.x - 1) * CELL_SIZE * 0.5, -0.10, (GRID_SIZE.y - 1) * CELL_SIZE * 0.5)
+    ground.material_override = _material(Color("718d70"), 0.96)
     add_child(ground)
 
 func _place_floor(cell: Vector2i) -> void:
