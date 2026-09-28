@@ -11,6 +11,10 @@ const TOOL_COSTS := {
     "floor": 8,
     "wall": 12,
     "door": 35,
+    "window": 45,
+    "stairs": 180,
+    "platform": 40,
+    "roof": 220,
     "erase": 0,
     "bed": 120,
     "food": 140,
@@ -44,6 +48,12 @@ var floor_root: Node3D
 var wall_root: Node3D
 var furniture_root: Node3D
 var lot_root: Node3D
+var roof_root: Node3D
+var roof_enabled := false
+var windows: Array[Dictionary] = []
+var stairs: Array[Dictionary] = []
+var platforms: Array[Dictionary] = []
+var current_build_level := 0
 
 func _ready() -> void:
     lot_root = Node3D.new()
@@ -58,6 +68,9 @@ func _ready() -> void:
     furniture_root = Node3D.new()
     furniture_root.name = "Furniture"
     lot_root.add_child(furniture_root)
+    roof_root = Node3D.new()
+    roof_root.name = "Roof"
+    lot_root.add_child(roof_root)
     _make_lot_ground()
 
 func make_starter_home() -> void:
@@ -97,7 +110,12 @@ func clear_house() -> void:
     walls.clear()
     doors.clear()
     furniture.clear()
-    for root in [floor_root, wall_root, furniture_root]:
+    windows.clear()
+    stairs.clear()
+    platforms.clear()
+    roof_enabled = false
+    current_build_level = 0
+    for root in [floor_root, wall_root, furniture_root, roof_root]:
         if root:
             for child in root.get_children():
                 child.free()
@@ -116,6 +134,14 @@ func place(cell: Vector2i, tool: String, orientation: String = "N") -> bool:
             _place_wall(cell, orientation, false)
         "door":
             _place_wall(cell, orientation, true)
+        "window":
+            _place_window(cell, orientation)
+        "stairs":
+            _place_stairs(cell)
+        "platform":
+            _place_platform(cell)
+        "roof":
+            toggle_roof()
         "erase":
             _erase_cell(cell)
         _:
@@ -231,6 +257,11 @@ func serialize() -> Dictionary:
         "walls": wall_data,
         "doors": door_data,
         "furniture": furniture.duplicate(true),
+        "windows": windows.duplicate(true),
+        "stairs": stairs.duplicate(true),
+        "platforms": platforms.duplicate(true),
+        "roof_enabled": roof_enabled,
+        "current_build_level": current_build_level,
     }
 
 func deserialize(data: Dictionary) -> void:
@@ -244,6 +275,18 @@ func deserialize(data: Dictionary) -> void:
     for item in data.get("furniture", []):
         var raw_cell: Array = item.get("cell", [0, 0])
         _place_furniture(Vector2i(int(raw_cell[0]), int(raw_cell[1])), String(item.get("type", "sofa")))
+    for item in data.get("windows", []):
+        var raw_window: Array = item.get("cell", [0, 0])
+        _place_window(Vector2i(int(raw_window[0]), int(raw_window[1])), String(item.get("orientation", "N")))
+    for item in data.get("stairs", []):
+        var raw_stair: Array = item.get("cell", [0, 0])
+        _place_stairs(Vector2i(int(raw_stair[0]), int(raw_stair[1])))
+    for item in data.get("platforms", []):
+        var raw_platform: Array = item.get("cell", [0, 0])
+        _place_platform(Vector2i(int(raw_platform[0]), int(raw_platform[1])))
+    current_build_level = int(data.get("current_build_level", 0))
+    if bool(data.get("roof_enabled", false)):
+        toggle_roof()
     set_cutaway_visible(true)
     changed.emit()
 
@@ -433,6 +476,120 @@ func _sphere(root: Node3D, radius: float, position: Vector3, color: Color) -> vo
     m.position = position
     m.material_override = _material(color, 0.72)
     root.add_child(m)
+
+func make_park() -> void:
+    clear_house()
+    for x in range(1, 10):
+        for z in range(1, 8):
+            _place_floor(Vector2i(x, z))
+    _place_furniture(Vector2i(3, 3), "sofa")
+    _place_furniture(Vector2i(7, 3), "sofa")
+    _place_furniture(Vector2i(5, 5), "toy")
+    _place_furniture(Vector2i(3, 6), "plant")
+    _place_furniture(Vector2i(7, 6), "plant")
+    changed.emit()
+
+func make_cafe() -> void:
+    clear_house()
+    for x in range(1, 10):
+        for z in range(1, 8):
+            _place_floor(Vector2i(x, z))
+    for x in range(1, 10):
+        _place_wall(Vector2i(x, 1), "N", false)
+    for z in range(1, 8):
+        _place_wall(Vector2i(1, z), "W", false)
+    _place_wall(Vector2i(5, 1), "N", true)
+    _place_furniture(Vector2i(3, 3), "table")
+    _place_furniture(Vector2i(6, 3), "table")
+    _place_furniture(Vector2i(8, 2), "food")
+    _place_furniture(Vector2i(7, 2), "stove")
+    _place_furniture(Vector2i(6, 2), "fridge")
+    _place_furniture(Vector2i(2, 6), "sofa")
+    changed.emit()
+
+func make_workshop() -> void:
+    clear_house()
+    for x in range(1, 10):
+        for z in range(1, 8):
+            _place_floor(Vector2i(x, z))
+    for x in range(1, 10):
+        _place_wall(Vector2i(x, 1), "N", false)
+    _place_wall(Vector2i(5, 1), "N", true)
+    _place_furniture(Vector2i(3, 3), "workbench")
+    _place_furniture(Vector2i(6, 3), "workbench")
+    _place_furniture(Vector2i(3, 5), "desk")
+    _place_furniture(Vector2i(6, 5), "bookshelf")
+    changed.emit()
+
+func _place_window(cell: Vector2i, orientation: String) -> void:
+    var o := "W" if orientation == "W" else "N"
+    var root := Node3D.new()
+    root.name = "Window_%d_%d_%s_%d" % [cell.x, cell.y, o, windows.size()]
+    var frame := MeshInstance3D.new()
+    var frame_mesh := BoxMesh.new()
+    frame_mesh.size = Vector3(CELL_SIZE * 0.74, 0.78, 0.06) if o == "N" else Vector3(0.06, 0.78, CELL_SIZE * 0.74)
+    frame.mesh = frame_mesh
+    frame.position = cell_to_world(cell) + Vector3(0, 1.05, 0)
+    if o == "N":
+        frame.position.z -= CELL_SIZE * 0.5 - 0.02
+    else:
+        frame.position.x -= CELL_SIZE * 0.5 - 0.02
+    var glass := StandardMaterial3D.new()
+    glass.albedo_color = Color(0.45, 0.78, 0.86, 0.48)
+    glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    glass.metallic = 0.0
+    glass.roughness = 0.12
+    frame.material_override = glass
+    root.add_child(frame)
+    wall_root.add_child(root)
+    windows.append({"cell":[cell.x, cell.y], "orientation":o})
+
+func _place_stairs(cell: Vector2i) -> void:
+    var root := Node3D.new()
+    root.name = "Stairs_%d_%d_%d" % [cell.x, cell.y, stairs.size()]
+    root.position = cell_to_world(cell)
+    for step in range(5):
+        _box(root, Vector3(1.0, 0.16, 0.28), Vector3(0, 0.08 + step * 0.16, -0.48 + step * 0.22), Color("8b6c52"))
+    furniture_root.add_child(root)
+    stairs.append({"cell":[cell.x, cell.y], "to_level": current_build_level + 1})
+
+func _place_platform(cell: Vector2i) -> void:
+    var root := Node3D.new()
+    root.name = "Platform_%d_%d_%d" % [cell.x, cell.y, platforms.size()]
+    root.position = cell_to_world(cell)
+    _box(root, Vector3(CELL_SIZE * 0.94, 0.28, CELL_SIZE * 0.94), Vector3(0, 0.15, 0), Color("92785f"))
+    furniture_root.add_child(root)
+    platforms.append({"cell":[cell.x, cell.y], "height":0.28})
+
+func toggle_roof() -> void:
+    roof_enabled = not roof_enabled
+    for child in roof_root.get_children():
+        child.free()
+    if not roof_enabled or floors.is_empty():
+        return
+    var min_x := 999
+    var max_x := -999
+    var min_z := 999
+    var max_z := -999
+    for key in floors.keys():
+        var cell := _key_to_cell(String(key))
+        min_x = mini(min_x, cell.x)
+        max_x = maxi(max_x, cell.x)
+        min_z = mini(min_z, cell.y)
+        max_z = maxi(max_z, cell.y)
+    var roof := MeshInstance3D.new()
+    var mesh := PrismMesh.new()
+    mesh.size = Vector3((max_x - min_x + 1) * CELL_SIZE + 0.3, 1.3, (max_z - min_z + 1) * CELL_SIZE + 0.3)
+    roof.mesh = mesh
+    roof.position = Vector3((min_x + max_x) * CELL_SIZE * 0.5, WALL_HEIGHT + 0.68, (min_z + max_z) * CELL_SIZE * 0.5)
+    roof.material_override = _material(Color("6e5147"), 0.96)
+    roof_root.add_child(roof)
+
+func cycle_build_level() -> int:
+    current_build_level += 1
+    if current_build_level > 2:
+        current_build_level = -1
+    return current_build_level
 
 func tick_environment(delta: float) -> void:
     for i in range(furniture.size()):
