@@ -666,10 +666,10 @@ func _buy_fast_learner() -> void:
     save_game(false)
 
 func _travel_next() -> void:
-    var lots := ["Home", "Puddle Park", "Mossy Cafe", "Community Workshop"]
+    var lots: Array[String] = ["Home", "Puddle Park", "Mossy Cafe", "Community Workshop"]
     household.lot_builds[household.current_lot] = build_system.serialize()
     var index := lots.find(household.current_lot)
-    var next_lot := lots[(index + 1) % lots.size()]
+    var next_lot: String = lots[(index + 1) % lots.size()]
     household.current_lot = next_lot
 
     if household.lot_builds.has(next_lot):
