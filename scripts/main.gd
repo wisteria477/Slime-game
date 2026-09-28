@@ -9,7 +9,7 @@ const COLORS := [
     ["Lilac", Color("ae9cf2")],
     ["Pearl", Color("b9d7ff")],
 ]
-const NEEDS := ["hunger", "energy", "hygiene", "fun", "social", "comfort"]
+const NEEDS := ["hunger", "energy", "hygiene", "fun", "social", "comfort", "bladder"]
 const PERSONALITIES := ["Bubbly", "Playful", "Neat", "Foodie", "Cozy", "Independent"]
 const HABITS := ["Snacky", "Napper", "Tidy Routine", "Toy Lover", "Chatty", "Cozy Seeker", "Wanderer", "Slow Starter"]
 const TAP_SLOP := 16.0
@@ -45,6 +45,10 @@ var creator_panel: PanelContainer
 var creator_name: LineEdit
 var creator_color: OptionButton
 var creator_personality: OptionButton
+var creator_size: OptionButton
+var creator_eyes: OptionButton
+var creator_core: OptionButton
+var creator_antenna: OptionButton
 var creator_habit_a: OptionButton
 var creator_habit_b: OptionButton
 var baby_overlay: ColorRect
@@ -728,8 +732,8 @@ func _build_creator_dialog() -> void:
 
     creator_panel = PanelContainer.new()
     creator_panel.set_anchors_preset(Control.PRESET_CENTER)
-    creator_panel.position = Vector2(-310, -280)
-    creator_panel.custom_minimum_size = Vector2(620, 560)
+    creator_panel.position = Vector2(-330, -350)
+    creator_panel.custom_minimum_size = Vector2(660, 700)
     creator_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.80, 0.93, 0.92, 0.99), 32))
     creator_overlay.add_child(creator_panel)
 
@@ -782,6 +786,50 @@ func _build_creator_dialog() -> void:
         creator_personality.add_item(personality_name)
     personality_box.add_child(creator_personality)
     row_one.add_child(personality_box)
+
+    var appearance_label := _label("Appearance")
+    appearance_label.add_theme_font_size_override("font_size", 18)
+    box.add_child(appearance_label)
+
+    var appearance_row_a := HBoxContainer.new()
+    appearance_row_a.add_theme_constant_override("separation", 10)
+    box.add_child(appearance_row_a)
+
+    creator_size = OptionButton.new()
+    creator_size.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    creator_size.custom_minimum_size = Vector2(0, 48)
+    _style_option(creator_size)
+    for value in ["Tiny", "Standard", "Big"]:
+        creator_size.add_item("Size: " + value)
+    appearance_row_a.add_child(creator_size)
+
+    creator_eyes = OptionButton.new()
+    creator_eyes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    creator_eyes.custom_minimum_size = Vector2(0, 48)
+    _style_option(creator_eyes)
+    for value in ["Round", "Sleepy", "Wide"]:
+        creator_eyes.add_item("Eyes: " + value)
+    appearance_row_a.add_child(creator_eyes)
+
+    var appearance_row_b := HBoxContainer.new()
+    appearance_row_b.add_theme_constant_override("separation", 10)
+    box.add_child(appearance_row_b)
+
+    creator_core = OptionButton.new()
+    creator_core.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    creator_core.custom_minimum_size = Vector2(0, 48)
+    _style_option(creator_core)
+    for value in ["Warm", "Cool", "Bright"]:
+        creator_core.add_item("Core: " + value)
+    appearance_row_b.add_child(creator_core)
+
+    creator_antenna = OptionButton.new()
+    creator_antenna.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    creator_antenna.custom_minimum_size = Vector2(0, 48)
+    _style_option(creator_antenna)
+    for value in ["Curl", "Droplet", "Bubble"]:
+        creator_antenna.add_item("Antenna: " + value)
+    appearance_row_b.add_child(creator_antenna)
 
     var habits_label := _label("Habits")
     habits_label.add_theme_font_size_override("font_size", 18)
@@ -946,6 +994,10 @@ func _open_creator() -> void:
     var index := household.slimes.size()
     creator_color.select(index % COLORS.size())
     creator_personality.select(index % PERSONALITIES.size())
+    creator_size.select(index % 3)
+    creator_eyes.select((index + 1) % 3)
+    creator_core.select((index + 2) % 3)
+    creator_antenna.select(index % 3)
     creator_habit_a.select(index % HABITS.size())
     creator_habit_b.select((index + 3) % HABITS.size())
     creator_overlay.visible = true
@@ -964,12 +1016,19 @@ func _confirm_creator() -> void:
         HABITS[habit_a_idx],
         HABITS[habit_b_idx],
     ]
+    var chosen_appearance := {
+        "size": ["Tiny", "Standard", "Big"][maxi(creator_size.selected, 0)],
+        "eyes": ["Round", "Sleepy", "Wide"][maxi(creator_eyes.selected, 0)],
+        "core": ["Warm", "Cool", "Bright"][maxi(creator_core.selected, 0)],
+        "antenna": ["Curl", "Droplet", "Bubble"][maxi(creator_antenna.selected, 0)],
+    }
     var slime := household.add_slime(
         creator_name.text,
         COLORS[idx][1],
         "adult",
         PERSONALITIES[personality_idx],
-        chosen_habits
+        chosen_habits,
+        chosen_appearance
     )
     household.select_slime(slime.slime_id)
     creator_overlay.visible = false
