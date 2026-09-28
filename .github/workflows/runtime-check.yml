@@ -6,6 +6,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: slime-life-runtime
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
