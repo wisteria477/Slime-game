@@ -33,10 +33,16 @@ var is_npc := false
 var age_stage := "adult"
 var parents: Array[String] = []
 var slime_color := Color("68d7ff")
+var appearance: Dictionary = {
+    "size": "Standard",
+    "eyes": "Round",
+    "core": "Warm",
+    "antenna": "Curl",
+}
 var personality := "Bubbly"
 var habits: Array[String] = []
 var traits := {"playful": 0.5, "social": 0.5, "tidy": 0.5, "sleepy": 0.5}
-var needs := {"hunger": 88.0, "energy": 90.0, "hygiene": 88.0, "fun": 90.0, "social": 88.0, "comfort": 90.0}
+var needs := {"hunger": 88.0, "energy": 90.0, "hygiene": 88.0, "fun": 90.0, "social": 88.0, "comfort": 90.0, "bladder": 92.0}
 var relationships: Dictionary = {}
 var relationship_flags: Dictionary = {}
 var emotion := "Fine"
@@ -57,6 +63,8 @@ var secondary_activity := ""
 var current_activity := "Idle"
 var reward_traits: Array[String] = []
 var routine_memory: Dictionary = {}
+var life_state := "living"
+var danger_timer := 0.0
 var want_refresh_timer := 0.0
 var age_seconds := 0.0
 var sim_enabled := true
@@ -77,13 +85,15 @@ var state_label: Label3D
 var base_visual_scale := Vector3.ONE
 var idle_phase := 0.0
 
-func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref, personality_value := "Bubbly", habits_value: Array[String] = []) -> void:
+func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref, personality_value := "Bubbly", habits_value: Array[String] = [], appearance_value: Dictionary = {}) -> void:
     slime_id = id_value
     display_name = name_value
     slime_color = color_value
     age_stage = stage
     personality = personality_value
     habits = habits_value.duplicate()
+    if not appearance_value.is_empty():
+        appearance = appearance_value.duplicate(true)
     build_system = build_ref
     household = household_ref
     rng.seed = hash(slime_id)
@@ -93,6 +103,8 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     fears = [SlimeLifeRules.random_fear(rng)]
     _build_character()
     _apply_age_scale()
+    _apply_appearance()
+    _apply_appearance()
     _update_emotion()
 
 func _physics_process(_delta: float) -> void:
@@ -144,6 +156,7 @@ func serialize() -> Dictionary:
         "age_stage": age_stage,
         "parents": parents.duplicate(),
         "color": slime_color.to_html(true),
+        "appearance": appearance.duplicate(true),
         "personality": personality,
         "habits": habits.duplicate(),
         "traits": traits.duplicate(true),
@@ -165,6 +178,8 @@ func serialize() -> Dictionary:
         "inventory": inventory.duplicate(true),
         "reward_traits": reward_traits.duplicate(),
         "routine_memory": routine_memory.duplicate(true),
+        "life_state": life_state,
+        "danger_timer": danger_timer,
         "age_seconds": age_seconds,
         "position": [global_position.x, global_position.y, global_position.z],
     }
@@ -174,6 +189,7 @@ func restore(data: Dictionary) -> void:
     parents.clear()
     for p in data.get("parents", []):
         parents.append(String(p))
+    appearance = data.get("appearance", appearance).duplicate(true)
     personality = String(data.get("personality", personality))
     habits.clear()
     for habit in data.get("habits", []):
@@ -199,6 +215,8 @@ func restore(data: Dictionary) -> void:
     for reward in data.get("reward_traits", []):
         reward_traits.append(String(reward))
     routine_memory = data.get("routine_memory", {}).duplicate(true)
+    life_state = String(data.get("life_state", "living"))
+    danger_timer = float(data.get("danger_timer", 0.0))
     age_seconds = float(data.get("age_seconds", 0.0))
     var pos: Array = data.get("position", [global_position.x, global_position.y, global_position.z])
     global_position = Vector3(float(pos[0]), float(pos[1]), float(pos[2]))
@@ -367,6 +385,97 @@ func _animate_idle() -> void:
     elif action_kind == "social":
         lean = sin(now * 1.25) * 0.055
     visual_root.rotation.z = lean
+    _update_expression_visual()
+
+func _apply_appearance() -> void:
+    if visual_root == null:
+        return
+    var size_name := String(appearance.get("size", "Standard"))
+    var size_mult := 1.0
+    if size_name == "Tiny":
+        size_mult = 0.82
+    elif size_name == "Big":
+        size_mult = 1.16
+    base_visual_scale *= size_mult
+
+    var eye_l := visual_root.get_node_or_null("EyeL") as Node3D
+    var eye_r := visual_root.get_node_or_null("EyeR") as Node3D
+    var eye_style := String(appearance.get("eyes", "Round"))
+    if eye_l and eye_r:
+        if eye_style == "Sleepy":
+            eye_l.scale.y *= 0.55
+            eye_r.scale.y *= 0.55
+        elif eye_style == "Wide":
+            eye_l.scale *= 1.18
+            eye_r.scale *= 1.18
+
+    var core := visual_root.get_node_or_null("Core") as MeshInstance3D
+    if core and core.material_override is StandardMaterial3D:
+        var mat := core.material_override as StandardMaterial3D
+        var core_style := String(appearance.get("core", "Warm"))
+        if core_style == "Cool":
+            mat.emission = Color("8be7ff")
+            mat.albedo_color = Color(0.52, 0.90, 1.0, 0.55)
+        elif core_style == "Bright":
+            mat.emission_energy_multiplier = 1.35
+
+    var antenna_tip := visual_root.get_node_or_null("AntennaTip") as Node3D
+    if antenna_tip:
+        var antenna_style := String(appearance.get("antenna", "Curl"))
+        if antenna_style == "Droplet":
+            antenna_tip.scale.y *= 1.45
+        elif antenna_style == "Bubble":
+            antenna_tip.scale *= 1.35
+
+func _update_expression_visual() -> void:
+    if visual_root == null:
+        return
+    var eye_l := visual_root.get_node_or_null("EyeL") as Node3D
+    var eye_r := visual_root.get_node_or_null("EyeR") as Node3D
+    var mouth := visual_root.get_node_or_null("Mouth") as Node3D
+    if eye_l == null or eye_r == null or mouth == null:
+        return
+    match emotion:
+        "Happy", "Playful", "Inspired":
+            mouth.scale = Vector3(1.35, 0.75, 1.0)
+            eye_l.rotation.z = -0.05
+            eye_r.rotation.z = 0.05
+        "Sad":
+            mouth.scale = Vector3(0.92, 0.70, 1.0)
+            mouth.rotation.z = PI
+            eye_l.rotation.z = 0.10
+            eye_r.rotation.z = -0.10
+        "Angry":
+            mouth.scale = Vector3(0.88, 0.55, 1.0)
+            eye_l.rotation.z = 0.18
+            eye_r.rotation.z = -0.18
+        "Tired":
+            eye_l.scale.y = absf(eye_l.scale.y) * 0.55
+            eye_r.scale.y = absf(eye_r.scale.y) * 0.55
+            mouth.scale = Vector3(0.72, 0.72, 1.0)
+        _:
+            mouth.rotation.z = 0.0
+
+func become_ghost() -> void:
+    if life_state == "ghost":
+        return
+    life_state = "ghost"
+    action_kind = ""
+    path.clear()
+    needs["hunger"] = 100.0
+    needs["bladder"] = 100.0
+    add_moodlet("Became a Spirit", "Fine", 1.0, 999999.0)
+    if visual_root:
+        visual_root.modulate = Color(0.75, 0.90, 1.0, 0.62) if "modulate" in visual_root else Color.WHITE
+    current_activity = "Haunting peacefully"
+
+func revive() -> void:
+    if life_state != "ghost":
+        return
+    life_state = "living"
+    danger_timer = 0.0
+    add_moodlet("Back to Life", "Happy", 12.0, 30.0)
+    current_activity = "Alive again"
 
 func _decay_needs(delta: float) -> void:
     var rates := {
@@ -376,6 +485,7 @@ func _decay_needs(delta: float) -> void:
         "fun": 0.22,
         "social": 0.20,
         "comfort": 0.15,
+        "bladder": 0.26,
     }
     for key in needs.keys():
         var rate := float(rates.get(key, 0.16)) * _decay_multiplier(String(key))
@@ -508,6 +618,7 @@ func _seek_need(key: String) -> void:
         "hygiene": "bath",
         "fun": "toy",
         "comfort": "sofa",
+        "bladder": "toilet",
     }.get(key, ""))
     if furniture_kind.is_empty():
         return
@@ -517,6 +628,8 @@ func _seek_need(key: String) -> void:
     action_kind = key
     current_activity = _action_label(key)
     target_slime_id = ""
+    var target_item: Dictionary = target.get("item", {})
+    target_object_id = String(target_item.get("id", ""))
     _set_path_to(target["cell"])
     state_label.text = _action_label(key)
 
@@ -616,9 +729,16 @@ func _perform_action(delta: float) -> void:
         _complete_want(_want_id_for_action(action_kind))
         _try_secondary_social(delta)
     var action_finished := action_timer >= 4.0
-    if action_kind in ["hunger", "energy", "hygiene", "fun", "social", "comfort"]:
+    if action_kind in ["hunger", "energy", "hygiene", "fun", "social", "comfort", "bladder"]:
         action_finished = action_finished or float(needs.get(action_kind, 0.0)) >= 96.0
     if action_finished:
+        if action_kind == "hunger":
+            add_inventory_item("Prepared Meal", 1)
+            add_moodlet("Ate a Meal", "Happy", 3.0 + float(skill_level("cooking")) * 0.4, 12.0)
+        elif action_kind == "bladder":
+            add_moodlet("Relieved", "Happy", 3.0, 10.0)
+        elif action_kind == "energy" and not target_object_id.is_empty():
+            build_system.claim_object(target_object_id, slime_id)
         action_timer = 0.0
         action_kind = ""
         target_slime_id = ""
@@ -747,6 +867,8 @@ func _gain_activity_skill(kind: String, delta: float) -> void:
     match kind:
         "hunger":
             gain_skill("cooking", 0.8 * delta)
+        "bladder":
+            gain_skill("cleaning", 0.15 * delta)
         "hygiene":
             gain_skill("cleaning", 0.7 * delta)
         "fun":
@@ -764,6 +886,7 @@ func _want_id_for_action(kind: String) -> String:
         "fun": "play",
         "social": "social",
         "comfort": "cozy",
+        "bladder": "bathroom",
     }.get(kind, "")
 
 func _complete_want(want_id: String) -> void:
@@ -844,6 +967,7 @@ func _action_label(key: String) -> String:
         "fun": "Play",
         "social": "Chat",
         "comfort": "Cozy",
+        "bladder": "Bathroom",
         "care_baby": "Care",
         "clean_object": "Clean",
         "repair_object": "Repair",
