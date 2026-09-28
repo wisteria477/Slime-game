@@ -16,6 +16,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: slime-life-web-publish
+  cancel-in-progress: true
+
 env:
   GODOT_VERSION: 4.7.2-stable
   GODOT_TEMPLATE_DIR: 4.7.2.stable
