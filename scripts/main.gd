@@ -1995,7 +1995,8 @@ func _queue_object_interaction(action: String, item: Dictionary) -> void:
                 slime.favorite_hobby = "Creative Project"
             "toy":
                 slime.favorite_hobby = "Toy Design"
-    slime.queue_interaction(action, String(item.get("id", "")), target_cell)
+    var display_label := String((build_system.interaction_options_for_type(kind).filter(func(option): return String(option.get("action", "")) == action).front() if not build_system.interaction_options_for_type(kind).filter(func(option): return String(option.get("action", "")) == action).is_empty() else {}).get("label", slime._action_label(action)))
+    slime.queue_interaction(action, String(item.get("id", "")), target_cell, "", display_label)
     _hide_context()
     last_action_signature = ""
     _status("Queued: %s" % slime._action_label(action))
@@ -2033,7 +2034,7 @@ func _queue_social_interaction(target_id: String, interaction: String) -> void:
     if selected == null or target == null:
         return
     household.social_interact(selected.slime_id, target_id, interaction)
-    selected.queue_interaction("social", "", target.current_cell(), target_id)
+    selected.queue_interaction("social", "", target.current_cell(), target_id, "%s with %s" % [interaction, target.display_name])
     _hide_context()
     last_action_signature = ""
     _status("%s queued with %s" % [interaction, target.display_name])
