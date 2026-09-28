@@ -40,6 +40,8 @@ var life_text: RichTextLabel
 var career_cycle_button: Button
 var social_target: OptionButton
 var social_action: OptionButton
+var share_line: LineEdit
+var cheat_line: LineEdit
 var creator_overlay: ColorRect
 var creator_panel: PanelContainer
 var creator_name: LineEdit
@@ -545,6 +547,25 @@ func _build_life_panel() -> void:
 
     controls.add_child(_button("DO SOCIAL", _do_social, Vector2(240, 54)))
     controls.add_child(_button("PUDDLE PARTY", _start_party, Vector2(240, 54)))
+    controls.add_child(_button("MORTALITY", _toggle_mortality, Vector2(240, 54)))
+    controls.add_child(_button("MOVE OUT", _move_out_selected, Vector2(240, 54)))
+    controls.add_child(_button("MOVE IN LAST", _move_in_last, Vector2(240, 54)))
+    controls.add_child(_button("COPY SHARE", _copy_share_code, Vector2(240, 54)))
+
+    share_line = LineEdit.new()
+    share_line.placeholder_text = "Paste Slime Life share code"
+    share_line.custom_minimum_size = Vector2(240, 52)
+    _style_text_field(share_line)
+    controls.add_child(share_line)
+    controls.add_child(_button("IMPORT SHARE", _import_share_code, Vector2(240, 54)))
+
+    cheat_line = LineEdit.new()
+    cheat_line.placeholder_text = "Cheat command"
+    cheat_line.custom_minimum_size = Vector2(240, 52)
+    _style_text_field(cheat_line)
+    controls.add_child(cheat_line)
+    controls.add_child(_button("RUN CHEAT", _run_cheat, Vector2(240, 54)))
+
     controls.add_child(_button("CLOSE", _close_life_panel, Vector2(240, 54)))
 
 func _open_life_panel() -> void:
@@ -619,6 +640,13 @@ func _refresh_life_panel() -> void:
         build_system.room_count(),
         household.current_lot,
         household.achievements.size(),
+    ]
+    life_text.text += "\n[b]Life state[/b]  %s · Mortality %s\n[b]Family[/b]  %s\n[b]Inventory[/b]  %s\n[b]Inactive households[/b]  %d" % [
+        slime.life_state.capitalize(),
+        "ON" if household.mortality_enabled else "OFF",
+        household.family_tree_text(slime),
+        JSON.stringify(slime.inventory),
+        household.inactive_households.size(),
     ]
     if not household.event_name.is_empty():
         life_text.text += "\n\n[b]Event[/b]  %s · %ds left · score %d" % [
@@ -720,6 +748,114 @@ func _start_party() -> void:
     else:
         _status("An event is already running")
     _refresh_life_panel()
+
+func _toggle_mortality() -> void:
+    household.mortality_enabled = not household.mortality_enabled
+    _status("Mortality %s" % ("enabled" if household.mortality_enabled else "disabled"))
+    _refresh_life_panel()
+    save_game(false)
+
+func _move_out_selected() -> void:
+    var slime := household.selected_slime()
+    if slime == null:
+        return
+    if household.move_out(slime.slime_id):
+        _status("%s moved into a new household" % slime.display_name)
+        _populate_social_targets()
+    else:
+        _status("You need at least one slime in this household")
+    _refresh_life_panel()
+    save_game(false)
+
+func _move_in_last() -> void:
+    if household.move_in_last():
+        _status("A slime moved back in")
+        _populate_social_targets()
+    else:
+        _status("No inactive household to move in")
+    _refresh_life_panel()
+    save_game(false)
+
+func _copy_share_code() -> void:
+    var payload := {
+        "version": 1,
+        "house": build_system.serialize(),
+        "household": household.serialize(),
+        "day": world_day,
+        "minutes": world_minutes,
+    }
+    var raw := JSON.stringify(payload).to_utf8_buffer()
+    var code := Marshalls.raw_to_base64(raw)
+    share_line.text = code
+    DisplayServer.clipboard_set(code)
+    _status("Share code copied")
+
+func _import_share_code() -> void:
+    var code := share_line.text.strip_edges()
+    if code.is_empty():
+        _status("Paste a share code first")
+        return
+    var raw := Marshalls.base64_to_raw(code)
+    var parsed = JSON.parse_string(raw.get_string_from_utf8())
+    if not (parsed is Dictionary):
+        _status("That share code is invalid")
+        return
+    var data := parsed as Dictionary
+    if not data.has("house") or not data.has("household"):
+        _status("That share code is incomplete")
+        return
+    build_system.deserialize(data["house"])
+    household.deserialize(data["household"])
+    world_day = int(data.get("day", 1))
+    world_minutes = float(data.get("minutes", 480.0))
+    _populate_social_targets()
+    _refresh_family()
+    _refresh_needs_panel()
+    _refresh_life_panel()
+    _status("Shared household imported")
+    save_game(false)
+
+func _run_cheat() -> void:
+    var command := cheat_line.text.strip_edges().to_lower()
+    var slime := household.selected_slime()
+    match command:
+        "motherlode":
+            household.earn(5000)
+            _status("+5000 puddle coins")
+        "fill":
+            if slime:
+                for key in slime.needs.keys():
+                    slime.needs[key] = 100.0
+                _status("Needs filled")
+        "ageup":
+            if slime and SlimeLifeRules.AGE_DURATIONS.has(slime.age_stage):
+                slime.age_seconds = float(SlimeLifeRules.AGE_DURATIONS[slime.age_stage])
+                _status("Age-up queued")
+        "skill":
+            if slime:
+                for skill in slime.skills.keys():
+                    var data: Dictionary = slime.skills[skill]
+                    data["level"] = mini(10, int(data.get("level", 0)) + 1)
+                    slime.skills[skill] = data
+                _status("All skills +1")
+        "ghost":
+            if slime:
+                slime.become_ghost()
+                _status("Spirit mode")
+        "revive":
+            if slime:
+                slime.revive()
+                _status("Revived")
+        "cash":
+            household.earn(1000)
+            _status("+1000 puddle coins")
+        "party":
+            _start_party()
+        _:
+            _status("Unknown cheat")
+    cheat_line.text = ""
+    _refresh_life_panel()
+    save_game(false)
 
 func _build_creator_dialog() -> void:
     creator_overlay = ColorRect.new()
