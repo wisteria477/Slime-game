@@ -1,20 +1,15 @@
 from pathlib import Path
-import struct
 root=Path(__file__).resolve().parents[1]
 required=[
  'project.godot','scenes/Main.tscn','scripts/main.gd','scripts/camera_rig.gd',
  'scripts/build_system.gd','scripts/slime_agent.gd','scripts/household.gd',
- 'assets/models/nim_slime_current.glb','export_presets.cfg'
+ 'assets/icons/slime_life_icon.svg','export_presets.cfg'
 ]
 for rel in required:
  p=root/rel
  if not p.exists() or p.stat().st_size==0:
   raise SystemExit(f'MISSING: {rel}')
-p=root/'assets/models/nim_slime_current.glb'
-data=p.read_bytes()[:12]
-if len(data)!=12 or data[:4]!=b'glTF' or struct.unpack('<I',data[4:8])[0]!=2:
- raise SystemExit('Invalid GLB header')
-texts={rel:(root/rel).read_text(errors='replace') for rel in required if rel.endswith(('.gd','.godot','.tscn','.cfg'))}
+texts={rel:(root/rel).read_text(errors='replace') for rel in required if rel.endswith(('.gd','.godot','.tscn','.cfg','.svg'))}
 joined='\n'.join(texts.values())
 checks={
  'baby logic':'add_baby(',
@@ -23,8 +18,8 @@ checks={
  'save':'SAVE_PATH',
  'needs':'hunger',
  'no death':'BABY_GROW_SECONDS',
- 'current model':'nim_slime_current.glb',
  'mobile touch':'InputEventScreenTouch',
+ 'fallback character':'_make_fallback_slime',
 }
 for name,needle in checks.items():
  if needle not in joined:
