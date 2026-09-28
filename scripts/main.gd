@@ -101,6 +101,8 @@ var pinch_distance := 0.0
 var pinch_centroid := Vector2.ZERO
 var pinch_angle := 0.0
 var last_viewport_size := Vector2.ZERO
+var tutorial_step := 0
+var tutorial_label: Label
 
 func _ready() -> void:
     Engine.max_fps = 60
@@ -411,12 +413,13 @@ func _apply_responsive_layout() -> void:
     life_button.custom_minimum_size = Vector2(118, 62)
     life_button.offset_left = 18
     life_button.offset_right = 136
-    camera_button.custom_minimum_size = Vector2(118, 62)
+    camera_button.custom_minimum_size = Vector2(96, 54)
     camera_button.offset_left = 146
-    camera_button.offset_right = 264
+    camera_button.offset_right = 242
+    camera_button.visible = not portrait
     needs_toggle_button.custom_minimum_size = Vector2(118, 62)
-    needs_toggle_button.offset_left = 274
-    needs_toggle_button.offset_right = 392
+    needs_toggle_button.offset_left = 146 if portrait else 252
+    needs_toggle_button.offset_right = 264 if portrait else 370
     if portrait:
         var control_top := -198 if not needs_expanded else -326
         var control_bottom := control_top + 62
@@ -495,7 +498,7 @@ func _build_ui() -> void:
     family_row.add_theme_constant_override("separation", 6)
     family_panel.add_child(family_row)
 
-    life_button = _button("LIFE", _open_life_panel, Vector2(104, 54))
+    life_button = _button("PROFILE", _open_life_panel, Vector2(118, 54))
     camera_button = _button("VIEW", _reset_camera, Vector2(104, 54))
     needs_toggle_button = _button("NEEDS", _toggle_needs, Vector2(104, 54))
     needs_toggle_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -651,6 +654,22 @@ func _build_ui() -> void:
     status_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
     root_ui.add_child(status_label)
 
+    tutorial_label = Label.new()
+    tutorial_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+    tutorial_label.offset_left = -290
+    tutorial_label.offset_right = 290
+    tutorial_label.offset_top = 142
+    tutorial_label.offset_bottom = 206
+    tutorial_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    tutorial_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+    tutorial_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    tutorial_label.add_theme_font_size_override("font_size", 16)
+    tutorial_label.add_theme_color_override("font_color", Color("173039"))
+    tutorial_label.add_theme_stylebox_override("normal", _panel_style(Color(0.90, 0.97, 0.93, 0.96), 18))
+    tutorial_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    tutorial_label.visible = false
+    root_ui.add_child(tutorial_label)
+
     context_panel = PanelContainer.new()
     context_panel.custom_minimum_size = Vector2(250, 0)
     context_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.88, 0.96, 0.94, 0.985), 24))
@@ -669,6 +688,7 @@ func _build_ui() -> void:
     _refresh_needs_panel()
 
 func _toggle_needs() -> void:
+    tutorial_label.visible = false
     needs_expanded = not needs_expanded
     needs_toggle_button.text = "HIDE" if needs_expanded else "NEEDS"
     if needs_row:
@@ -752,6 +772,7 @@ func _build_life_panel() -> void:
     controls.add_child(_button("CLOSE", _close_life_panel, Vector2(240, 54)))
 
 func _open_life_panel() -> void:
+    tutorial_label.visible = false
     _populate_social_targets()
     life_overlay.visible = true
     _refresh_life_panel()
@@ -1528,7 +1549,9 @@ func _confirm_creator() -> void:
     household.select_slime(slime.slime_id)
     audio_manager.positive()
     creator_overlay.visible = false
+    camera_rig.focus_on(slime.global_position)
     _status("%s joined the house — %s" % [slime.display_name, slime.profile_text()])
+    _start_tutorial()
     save_game(false)
 
 func _open_baby() -> void:
@@ -1752,8 +1775,9 @@ func _refresh_family() -> void:
     family_row.add_child(add_button)
     baby_button = _button("♥", _open_baby, Vector2(48, 44))
     baby_button.tooltip_text = "Have a baby slime"
-    baby_button.disabled = household.adult_slimes().size() < 2
     family_row.add_child(baby_button)
+    var desired_width := clampf(120.0 + float(household.slimes.size()) * 56.0, 220.0, 520.0)
+    family_panel.offset_left = -desired_width
 
 func _select_and_focus(id_value: String) -> void:
     household.select_slime(id_value)
@@ -1934,6 +1958,7 @@ func _clear_context_buttons() -> void:
         context_box.get_child(i).queue_free()
 
 func _show_object_context(item: Dictionary, screen_pos: Vector2) -> void:
+    _tutorial_advance(2)
     var selected := household.selected_slime()
     if selected == null:
         return
@@ -1982,6 +2007,7 @@ func _go_near_object(item: Dictionary) -> void:
     _hide_context()
 
 func _show_slime_context(target: SlimeAgent, screen_pos: Vector2) -> void:
+    _tutorial_advance(3)
     _clear_context_buttons()
     context_title.text = "%s • %s" % [target.display_name, target.emotion]
     var selected := household.selected_slime()
@@ -2078,6 +2104,9 @@ func load_game(slot := -1) -> bool:
     _refresh_family()
     _refresh_needs_panel()
     _refresh_money()
+    var selected := household.selected_slime()
+    if selected:
+        camera_rig.focus_on(selected.global_position)
     return true
 
 func _read_save_dictionary(path: String) -> Dictionary:
@@ -2148,6 +2177,37 @@ func _panel_style(color: Color, radius: int) -> StyleBoxFlat:
     style.content_margin_top = 7
     style.content_margin_bottom = 7
     return style
+
+func _start_tutorial() -> void:
+    tutorial_step = 1
+    _show_tutorial_step()
+
+func _tutorial_advance(required_step: int) -> void:
+    if tutorial_step != required_step:
+        return
+    tutorial_step += 1
+    _show_tutorial_step()
+
+func _show_tutorial_step() -> void:
+    if tutorial_label == null:
+        return
+    match tutorial_step:
+        1:
+            tutorial_label.text = "Tap your slime to see what they’re feeling and doing. Tap their FAMILY dot anytime to find them."
+            tutorial_label.visible = true
+            tutorial_step = 2
+        2:
+            tutorial_label.text = "Tap furniture to choose an interaction. Slimes will also use furniture automatically when they need it."
+            tutorial_label.visible = true
+        3:
+            tutorial_label.text = "Tap another slime to talk, joke, hug, flirt, argue, or switch control."
+            tutorial_label.visible = true
+        4:
+            tutorial_label.text = "PROFILE holds deeper life details. NEEDS expands motives. BUILD changes the house. You’re ready."
+            tutorial_label.visible = true
+            tutorial_step = 5
+        _:
+            tutorial_label.visible = false
 
 func _tick_status(delta: float) -> void:
     if status_label == null:
