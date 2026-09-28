@@ -167,12 +167,13 @@ func command_move(cell: Vector2i) -> void:
     state_label.text = "Go"
     _set_path_to(cell)
 
-func queue_interaction(action: String, object_id: String, target_cell: Vector2i, target_slime := "") -> void:
+func queue_interaction(action: String, object_id: String, target_cell: Vector2i, target_slime := "", display_label := "") -> void:
     player_queue.append({
         "action": action,
         "object_id": object_id,
         "cell": [target_cell.x, target_cell.y],
         "target_slime": target_slime,
+        "label": display_label,
     })
     if action_kind.is_empty() and path.is_empty():
         _start_next_player_action()
@@ -187,7 +188,8 @@ func _start_next_player_action() -> void:
     target_slime_id = String(entry.get("target_slime", ""))
     action_timer = 0.0
     action_phase = "player"
-    current_activity = _action_label(action_kind)
+    var custom_label := String(entry.get("label", ""))
+    current_activity = custom_label if not custom_label.is_empty() else _action_label(action_kind)
     state_label.text = current_activity
     _set_path_to(Vector2i(int(raw_cell[0]), int(raw_cell[1])))
 
@@ -217,7 +219,10 @@ func player_queue_text() -> Array[String]:
     if not action_kind.is_empty():
         result.append(_action_label(action_kind))
     for entry in player_queue:
-        result.append(_action_label(String(entry.get("action", ""))))
+        var label := String(entry.get("label", ""))
+        if label.is_empty():
+            label = _action_label(String(entry.get("action", "")))
+        result.append(label)
     return result
 
 func action_progress() -> float:
