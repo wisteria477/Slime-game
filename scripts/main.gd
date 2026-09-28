@@ -73,6 +73,7 @@ var touch_starts: Dictionary = {}
 var touch_moved: Dictionary = {}
 var pinch_distance := 0.0
 var pinch_centroid := Vector2.ZERO
+var pinch_angle := 0.0
 var last_viewport_size := Vector2.ZERO
 
 func _ready() -> void:
@@ -206,11 +207,16 @@ func _screen_drag(event: InputEventScreenDrag) -> void:
         var b: Vector2 = values[1]
         var center := (a + b) * 0.5
         var distance_now := a.distance_to(b)
+        var angle_now := a.angle_to_point(b)
         if pinch_distance > 0.0:
             camera_rig.zoom_by((pinch_distance - distance_now) * 0.012)
             camera_rig.pan_from_screen_delta(center - pinch_centroid)
+            var angle_delta := wrapf(angle_now - pinch_angle, -PI, PI)
+            if absf(angle_delta) > 0.01:
+                camera_rig.rotate_by(rad_to_deg(angle_delta) * 0.55)
         pinch_distance = distance_now
         pinch_centroid = center
+        pinch_angle = angle_now
 
 func _reset_pinch() -> void:
     if touches.size() < 2:
@@ -220,6 +226,7 @@ func _reset_pinch() -> void:
     var b: Vector2 = values[1]
     pinch_distance = a.distance_to(b)
     pinch_centroid = (a + b) * 0.5
+    pinch_angle = a.angle_to_point(b)
 
 func _world_tap(screen_pos: Vector2) -> void:
     if build_mode:
@@ -263,6 +270,7 @@ func _select_slime_from_screen(screen_pos: Vector2) -> bool:
     var collider = hit.get("collider")
     if collider is SlimeAgent:
         household.select_slime(collider.slime_id)
+        camera_rig.focus_on(collider.global_position, 10.5)
         _status(collider.display_name)
         return true
     return false
@@ -393,6 +401,13 @@ func _build_ui() -> void:
     family_panel.add_child(family_row)
 
     life_button = _button("LIFE", _open_life_panel, Vector2(104, 54))
+    var camera_button := _button("VIEW", _reset_camera, Vector2(104, 54))
+    camera_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+    camera_button.offset_left = 132
+    camera_button.offset_right = 236
+    camera_button.offset_top = -72
+    camera_button.offset_bottom = -18
+    root_ui.add_child(camera_button)
     life_button.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
     life_button.offset_left = 18
     life_button.offset_right = 122
@@ -1303,13 +1318,23 @@ func _refresh_family() -> void:
     for slime in household.slimes:
         var id_value := slime.slime_id
         var prefix := "• " if slime.age_stage == "baby" else ""
-        var button := _button(prefix + slime.display_name, household.select_slime.bind(id_value), Vector2(76, 44))
+        var button := _button(prefix + slime.display_name, _select_and_focus.bind(id_value), Vector2(76, 44))
         button.modulate = slime.slime_color.lightened(0.22)
         family_row.add_child(button)
     family_row.add_child(_button("+", _open_creator, Vector2(48, 44)))
     baby_button = _button("BABY", _open_baby, Vector2(70, 44))
     baby_button.disabled = household.adult_slimes().size() < 2
     family_row.add_child(baby_button)
+
+func _select_and_focus(id_value: String) -> void:
+    household.select_slime(id_value)
+    var slime := household.get_slime(id_value)
+    if slime:
+        camera_rig.focus_on(slime.global_position, 10.5)
+
+func _reset_camera() -> void:
+    camera_rig.reset_view()
+    _status("Camera reset")
 
 func _selection_changed(_slime) -> void:
     _refresh_family()
