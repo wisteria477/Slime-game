@@ -721,6 +721,15 @@ func _toggle_needs() -> void:
         needs_row.visible = needs_expanded
     _apply_responsive_layout()
 
+func _animate_control_in(control: Control) -> void:
+    if control == null:
+        return
+    control.modulate.a = 0.0
+    var tween := create_tween()
+    tween.set_trans(Tween.TRANS_QUAD)
+    tween.set_ease(Tween.EASE_OUT)
+    tween.tween_property(control, "modulate:a", 1.0, 0.16)
+
 func _build_life_panel() -> void:
     life_overlay = ColorRect.new()
     life_overlay.name = "LifeOverlay"
@@ -801,6 +810,7 @@ func _open_life_panel() -> void:
     tutorial_label.visible = false
     _populate_social_targets()
     life_overlay.visible = true
+    _animate_control_in(life_overlay)
     _refresh_life_panel()
 
 func _close_life_panel() -> void:
@@ -1259,6 +1269,7 @@ func _build_settings_panel() -> void:
 
 func _open_settings() -> void:
     settings_overlay.visible = true
+    _animate_control_in(settings_overlay)
 
 func _close_settings() -> void:
     settings_overlay.visible = false
@@ -1543,6 +1554,7 @@ func _open_creator() -> void:
     creator_habit_a.select(index % HABITS.size())
     creator_habit_b.select((index + 3) % HABITS.size())
     creator_overlay.visible = true
+    _animate_control_in(creator_overlay)
 
 func _cancel_creator() -> void:
     creator_overlay.visible = false
@@ -1596,6 +1608,7 @@ func _open_baby() -> void:
     parent_b.select(1)
     baby_name.text = ""
     baby_overlay.visible = true
+    _animate_control_in(baby_overlay)
 
 func _cancel_baby() -> void:
     baby_overlay.visible = false
@@ -2011,6 +2024,7 @@ func _open_day_schedule() -> void:
         event_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         context_box.add_child(event_label)
     context_panel.visible = true
+    _animate_control_in(context_panel)
     _place_context(Vector2(150, 86))
 
 func _show_object_context(item: Dictionary, screen_pos: Vector2) -> void:
@@ -2033,6 +2047,7 @@ func _show_object_context(item: Dictionary, screen_pos: Vector2) -> void:
     if options.is_empty():
         context_box.add_child(_button("Go Here", _go_near_object.bind(item), Vector2(230, 44)))
     context_panel.visible = true
+    _animate_control_in(context_panel)
     _place_context(screen_pos)
 
 func _queue_object_interaction(action: String, item: Dictionary) -> void:
