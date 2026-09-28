@@ -39,6 +39,12 @@ const TOOL_REFUNDS := {
     "wall": 6,
     "door": 18,
 }
+const STRUCTURE_PALETTES := [
+    {"name":"Warm Oak", "floor_a":Color("9a7e62"), "floor_b":Color("a8896b"), "wall":Color("c7b9a5"), "trim":Color("66584c")},
+    {"name":"Sea Glass", "floor_a":Color("789a98"), "floor_b":Color("86aaa7"), "wall":Color("c8d8d2"), "trim":Color("4e6865")},
+    {"name":"Berry Cream", "floor_a":Color("a88391"), "floor_b":Color("b78f9d"), "wall":Color("e1d1d4"), "trim":Color("71515c")},
+    {"name":"Stone Moss", "floor_a":Color("858574"), "floor_b":Color("949482"), "wall":Color("c9c6b3"), "trim":Color("5e6252")},
+]
 
 var floors: Dictionary = {}
 var walls: Dictionary = {}
@@ -55,6 +61,7 @@ var windows: Array[Dictionary] = []
 var stairs: Array[Dictionary] = []
 var platforms: Array[Dictionary] = []
 var current_build_level := 0
+var palette_index := 0
 
 func _ready() -> void:
     context_root = Node3D.new()
@@ -354,6 +361,7 @@ func serialize() -> Dictionary:
         "platforms": platforms.duplicate(true),
         "roof_enabled": roof_enabled,
         "current_build_level": current_build_level,
+        "palette_index": palette_index,
     }
 
 func deserialize(data: Dictionary) -> void:
@@ -388,6 +396,8 @@ func deserialize(data: Dictionary) -> void:
         var raw_platform: Array = item.get("cell", [0, 0])
         _place_platform(Vector2i(int(raw_platform[0]), int(raw_platform[1])))
     current_build_level = int(data.get("current_build_level", 0))
+    palette_index = clampi(int(data.get("palette_index", 0)), 0, STRUCTURE_PALETTES.size() - 1)
+    _apply_structure_palette()
     if bool(data.get("roof_enabled", false)):
         toggle_roof()
     set_cutaway_visible(true)
@@ -471,7 +481,8 @@ func _place_floor(cell: Vector2i) -> void:
     mesh.size = Vector3(CELL_SIZE * 0.985, 0.08, CELL_SIZE * 0.985)
     obj.mesh = mesh
     obj.position = cell_to_world(cell) + Vector3(0, 0.015, 0)
-    var floor_color := Color("9a7e62") if (cell.x + cell.y) % 2 == 0 else Color("a8896b")
+    var palette: Dictionary = STRUCTURE_PALETTES[palette_index]
+    var floor_color: Color = palette["floor_a"] if (cell.x + cell.y) % 2 == 0 else palette["floor_b"]
     obj.material_override = _material(floor_color, 0.88)
     floor_root.add_child(obj)
 
@@ -502,15 +513,49 @@ func _place_wall(cell: Vector2i, orientation: String, is_door: bool) -> void:
         mesh.size = Vector3(CELL_SIZE, WALL_HEIGHT, 0.10) if o == "N" else Vector3(0.10, WALL_HEIGHT, CELL_SIZE)
         body.mesh = mesh
         body.position = center
-        body.material_override = _material(Color("c7b9a5"), 0.92)
+        var palette: Dictionary = STRUCTURE_PALETTES[palette_index]
+        body.material_override = _material(palette["wall"], 0.92)
         var base_trim := MeshInstance3D.new()
         var trim_mesh := BoxMesh.new()
         trim_mesh.size = Vector3(CELL_SIZE, 0.16, 0.14) if o == "N" else Vector3(0.14, 0.16, CELL_SIZE)
         base_trim.mesh = trim_mesh
         base_trim.position = center - Vector3(0, WALL_HEIGHT * 0.5 - 0.08, 0)
-        base_trim.material_override = _material(Color("66584c"), 0.94)
+        base_trim.material_override = _material(palette["trim"], 0.94)
         root.add_child(base_trim)
         root.add_child(body)
+
+func cycle_palette() -> String:
+    palette_index = (palette_index + 1) % STRUCTURE_PALETTES.size()
+    _apply_structure_palette()
+    changed.emit()
+    return String((STRUCTURE_PALETTES[palette_index] as Dictionary).get("name", "Palette"))
+
+func _apply_structure_palette() -> void:
+    if floor_root == null or wall_root == null:
+        return
+    var palette: Dictionary = STRUCTURE_PALETTES[palette_index]
+    for child in floor_root.get_children():
+        if child is MeshInstance3D:
+            var key := String(child.name).trim_prefix("Floor_")
+            var parts := key.split("_")
+            var checker := 0
+            if parts.size() >= 2:
+                checker = int(parts[0]) + int(parts[1])
+            var floor_color: Color = palette["floor_a"] if checker % 2 == 0 else palette["floor_b"]
+            (child as MeshInstance3D).material_override = _material(floor_color, 0.88)
+    for root in wall_root.get_children():
+        for child in root.get_children():
+            if child is MeshInstance3D:
+                var mesh_child := child as MeshInstance3D
+                if child.name == "":
+                    continue
+                var size_y := 0.0
+                if mesh_child.mesh is BoxMesh:
+                    size_y = (mesh_child.mesh as BoxMesh).size.y
+                if size_y > WALL_HEIGHT * 0.7:
+                    mesh_child.material_override = _material(palette["wall"], 0.92)
+                elif size_y < 0.25:
+                    mesh_child.material_override = _material(palette["trim"], 0.94)
 
 func _make_door_visual(root: Node3D, center: Vector3, orientation: String) -> void:
     var frame_mat := _material(Color("5a4a3d"), 0.92)
