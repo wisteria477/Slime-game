@@ -26,7 +26,7 @@ func clear() -> void:
     household_changed.emit()
     selection_changed.emit(null)
 
-func add_slime(name_text: String, color: Color, stage := "adult") -> SlimeAgent:
+func add_slime(name_text: String, color: Color, stage := "adult", personality := "Bubbly", habits: Array[String] = []) -> SlimeAgent:
     var clean_name := name_text.strip_edges()
     if clean_name.is_empty():
         clean_name = "Slime %d" % next_number
@@ -34,7 +34,7 @@ func add_slime(name_text: String, color: Color, stage := "adult") -> SlimeAgent:
     var new_id := "%d_%d" % [Time.get_ticks_msec(), next_number]
     next_number += 1
     slime_root.add_child(slime)
-    slime.setup(new_id, clean_name, color, stage, build_system, self)
+    slime.setup(new_id, clean_name, color, stage, build_system, self, personality, habits)
     var spawn := build_system.find_spawn_cell(Vector2i(4 + (slimes.size() % 3), 5))
     slime.global_position = build_system.cell_to_world(spawn) + Vector3(0, 0.02, 0)
     slimes.append(slime)
@@ -54,7 +54,21 @@ func add_baby(parent_a_id: String, parent_b_id: String, baby_name: String) -> Sl
         clampf((a.slime_color.b + b.slime_color.b) * 0.5 + rng.randf_range(-0.04, 0.04), 0.0, 1.0),
         1.0
     )
-    var baby := add_slime(baby_name, mixed, "baby")
+    var inherited_personality := a.personality if rng.randf() < 0.5 else b.personality
+    var inherited_habits: Array[String] = []
+    var pool: Array[String] = []
+    for habit in a.habits:
+        if not pool.has(habit):
+            pool.append(habit)
+    for habit in b.habits:
+        if not pool.has(habit):
+            pool.append(habit)
+    pool.shuffle()
+    for habit in pool:
+        if inherited_habits.size() >= 2:
+            break
+        inherited_habits.append(habit)
+    var baby := add_slime(baby_name, mixed, "baby", inherited_personality, inherited_habits)
     baby.parents = [a.slime_id, b.slime_id]
     for key in baby.traits.keys():
         var source = a if rng.randf() < 0.5 else b
@@ -116,7 +130,16 @@ func deserialize(data: Dictionary) -> void:
     next_number = int(data.get("next_number", 1))
     for raw in data.get("slimes", []):
         var color := Color.from_string(String(raw.get("color", "68d7ffff")), Color("68d7ff"))
-        var slime := add_slime(String(raw.get("name", "Slime")), color, String(raw.get("age_stage", "adult")))
+        var restored_habits: Array[String] = []
+        for habit in raw.get("habits", []):
+            restored_habits.append(String(habit))
+        var slime := add_slime(
+            String(raw.get("name", "Slime")),
+            color,
+            String(raw.get("age_stage", "adult")),
+            String(raw.get("personality", "Bubbly")),
+            restored_habits
+        )
         slime.slime_id = String(raw.get("id", slime.slime_id))
         slime.restore(raw)
     var requested := String(data.get("selected_id", ""))
