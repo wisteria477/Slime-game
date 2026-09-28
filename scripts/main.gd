@@ -87,6 +87,7 @@ var world_minutes := 8.0 * 60.0
 var world_day := 1
 var autosave_timer := 0.0
 var status_timer := 0.0
+var toast_history: Array[String] = []
 var current_save_slot := 1
 var sun: DirectionalLight3D
 var touches: Dictionary = {}
@@ -116,6 +117,7 @@ func _ready() -> void:
     household.setup(slime_root, build_system)
     household.household_changed.connect(_refresh_family)
     household.selection_changed.connect(_selection_changed)
+    household.notification.connect(_status)
     camera_rig = SlimeCameraRig.new()
     camera_rig.name = "CameraRig"
     add_child(camera_rig)
@@ -2049,10 +2051,16 @@ func _tick_status(delta: float) -> void:
         status_label.modulate.a = alpha
     elif not status_label.text.is_empty():
         status_label.text = ""
+        toast_history.clear()
         status_label.modulate.a = 1.0
 
 func _status(text_value: String) -> void:
     if status_label:
-        status_label.text = text_value
+        if text_value.strip_edges().is_empty():
+            return
+        toast_history.append(text_value)
+        while toast_history.size() > 3:
+            toast_history.pop_front()
+        status_label.text = "\n".join(toast_history)
         status_label.modulate.a = 1.0
-        status_timer = 3.0
+        status_timer = 4.5
