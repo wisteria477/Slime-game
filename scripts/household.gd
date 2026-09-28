@@ -19,6 +19,9 @@ var unlocks: Array[String] = []
 var current_lot := "Home"
 var lot_builds: Dictionary = {}
 var relationship_events: Array[Dictionary] = []
+var event_name := ""
+var event_timer := 0.0
+var event_score := 0.0
 var last_schedule_key := ""
 var rng := RandomNumberGenerator.new()
 
@@ -46,6 +49,9 @@ func clear() -> void:
     unlocks.clear()
     lot_builds.clear()
     relationship_events.clear()
+    event_name = ""
+    event_timer = 0.0
+    event_score = 0.0
     current_lot = "Home"
     household_changed.emit()
     selection_changed.emit(null)
@@ -113,6 +119,37 @@ func tick(delta: float) -> void:
         slime.tick_sim(delta)
     for npc in npcs:
         npc.tick_sim(delta)
+    if event_timer > 0.0:
+        event_timer = maxf(0.0, event_timer - delta)
+        for slime in all_present_slimes():
+            if float(slime.needs.get("social", 0.0)) > 65.0:
+                event_score += delta * 0.18
+            if float(slime.needs.get("fun", 0.0)) > 65.0:
+                event_score += delta * 0.12
+        if event_timer <= 0.0:
+            _finish_event()
+
+func start_event(name_value: String, duration := 90.0) -> bool:
+    if not event_name.is_empty():
+        return false
+    event_name = name_value
+    event_timer = duration
+    event_score = 0.0
+    for slime in all_present_slimes():
+        slime.add_moodlet(name_value, "Happy", 5.0, minf(duration, 30.0))
+    household_changed.emit()
+    return true
+
+func _finish_event() -> void:
+    var finished_name := event_name
+    var reward := int(clampf(event_score, 0.0, 100.0) * 4.0)
+    funds += reward
+    for slime in slimes:
+        slime.satisfaction += int(clampf(event_score, 0.0, 100.0))
+        slime.add_moodlet("%s complete" % finished_name, "Happy", 7.0, 22.0)
+    event_name = ""
+    event_score = 0.0
+    household_changed.emit()
 
 func tick_world(day: int, hour: int, minute: int, delta: float) -> void:
     build_system.tick_environment(delta)
@@ -407,6 +444,9 @@ func serialize() -> Dictionary:
         "current_lot": current_lot,
         "lot_builds": lot_builds.duplicate(true),
         "relationship_events": relationship_events.duplicate(true),
+        "event_name": event_name,
+        "event_timer": event_timer,
+        "event_score": event_score,
     }
 
 func deserialize(data: Dictionary) -> void:
@@ -425,6 +465,9 @@ func deserialize(data: Dictionary) -> void:
     current_lot = String(data.get("current_lot", "Home"))
     lot_builds = data.get("lot_builds", {}).duplicate(true)
     relationship_events = data.get("relationship_events", []).duplicate(true)
+    event_name = String(data.get("event_name", ""))
+    event_timer = float(data.get("event_timer", 0.0))
+    event_score = float(data.get("event_score", 0.0))
     for raw in data.get("slimes", []):
         var color := Color.from_string(String(raw.get("color", "68d7ffff")), Color("68d7ff"))
         var restored_habits: Array[String] = []
