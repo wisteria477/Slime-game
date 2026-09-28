@@ -1,6 +1,9 @@
 extends Node3D
 
 const SAVE_PATH := "user://slime_life_save.json"
+const SAVE_SLOT_PATTERN := "user://slime_life_save_%d.json"
+const SAVE_BACKUP_PATTERN := "user://slime_life_save_%d.backup.json"
+const SAVE_VERSION := 2
 const COLORS := [
     ["Sky", Color("65ccff")],
     ["Rose", Color("f39ac0")],
@@ -44,6 +47,7 @@ var social_target: OptionButton
 var social_action: OptionButton
 var share_line: LineEdit
 var cheat_line: LineEdit
+var save_slot_option: OptionButton
 var creator_overlay: ColorRect
 var creator_panel: PanelContainer
 var creator_name: LineEdit
@@ -68,6 +72,7 @@ var sim_speed := 1.0
 var world_minutes := 8.0 * 60.0
 var world_day := 1
 var autosave_timer := 0.0
+var current_save_slot := 1
 var sun: DirectionalLight3D
 var touches: Dictionary = {}
 var touch_starts: Dictionary = {}
@@ -596,6 +601,16 @@ func _build_life_panel() -> void:
     controls.add_child(cheat_line)
     controls.add_child(_button("RUN CHEAT", _run_cheat, Vector2(240, 54)))
 
+    save_slot_option = OptionButton.new()
+    save_slot_option.custom_minimum_size = Vector2(240, 52)
+    _style_option(save_slot_option)
+    for slot in range(1, 4):
+        save_slot_option.add_item("Save Slot %d" % slot)
+        save_slot_option.set_item_metadata(save_slot_option.item_count - 1, slot)
+    save_slot_option.select(0)
+    controls.add_child(save_slot_option)
+    controls.add_child(_button("SAVE SLOT", _save_selected_slot, Vector2(240, 54)))
+    controls.add_child(_button("LOAD SLOT", _load_selected_slot, Vector2(240, 54)))
     controls.add_child(_button("CLOSE", _close_life_panel, Vector2(240, 54)))
 
 func _open_life_panel() -> void:
@@ -947,6 +962,38 @@ func _run_cheat() -> void:
     _refresh_life_panel()
     save_game(false)
 
+func _selected_save_slot() -> int:
+    if save_slot_option == null or save_slot_option.selected < 0:
+        return current_save_slot
+    return int(save_slot_option.get_item_metadata(save_slot_option.selected))
+
+func _save_selected_slot() -> void:
+    current_save_slot = _selected_save_slot()
+    save_game(true)
+
+func _load_selected_slot() -> void:
+    var slot := _selected_save_slot()
+    if load_game(slot):
+        current_save_slot = slot
+        _close_life_panel()
+        _status("Loaded save slot %d" % slot)
+    else:
+        _status("Save slot %d is empty or invalid" % slot)
+
+func _save_path_for_slot(slot: int) -> String:
+    if slot == 1:
+        return SAVE_PATH
+    return SAVE_SLOT_PATTERN % slot
+
+func _backup_path_for_slot(slot: int) -> String:
+    return SAVE_BACKUP_PATTERN % slot
+
+func _any_save_exists() -> bool:
+    for slot in range(1, 4):
+        if FileAccess.file_exists(_save_path_for_slot(slot)):
+            return true
+    return false
+
 func _build_creator_dialog() -> void:
     creator_overlay = ColorRect.new()
     creator_overlay.name = "CreatorOverlay"
@@ -1188,7 +1235,7 @@ func _show_start_screen() -> void:
     subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     box.add_child(subtitle)
     box.add_child(_button("START HOUSE", _new_game, Vector2(340, 76)))
-    if FileAccess.file_exists(SAVE_PATH):
+    if _any_save_exists():
         box.add_child(_button("CONTINUE", _continue_game, Vector2(340, 76)))
 
 func _new_game() -> void:
@@ -1203,7 +1250,7 @@ func _new_game() -> void:
     _open_creator()
 
 func _continue_game() -> void:
-    if load_game():
+    if load_game(1):
         _close_start_overlay()
         _status("Welcome back")
     else:
@@ -1440,40 +1487,76 @@ func save_game(show_message := true) -> void:
     if build_system == null or household == null:
         return
     var data := {
-        "version": 1,
+        "version": SAVE_VERSION,
+        "slot": current_save_slot,
+        "saved_unix_time": Time.get_unix_time_from_system(),
         "day": world_day,
         "minutes": world_minutes,
         "house": build_system.serialize(),
         "household": household.serialize(),
+        "settings": {
+            "music": audio_manager.music_enabled if audio_manager else true,
+            "sfx": audio_manager.sfx_enabled if audio_manager else true,
+        },
     }
-    var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+    var path := _save_path_for_slot(current_save_slot)
+    if FileAccess.file_exists(path):
+        var previous := FileAccess.open(path, FileAccess.READ)
+        if previous:
+            var backup := FileAccess.open(_backup_path_for_slot(current_save_slot), FileAccess.WRITE)
+            if backup:
+                backup.store_string(previous.get_as_text())
+                backup.close()
+            previous.close()
+    var file := FileAccess.open(path, FileAccess.WRITE)
     if file:
         file.store_string(JSON.stringify(data))
         file.close()
         if show_message:
-            _status("Saved")
+            _status("Saved slot %d" % current_save_slot)
 
-func load_game() -> bool:
-    if not FileAccess.file_exists(SAVE_PATH):
+func load_game(slot := -1) -> bool:
+    if slot < 1:
+        slot = current_save_slot
+    var path := _save_path_for_slot(slot)
+    var data := _read_save_dictionary(path)
+    if data.is_empty():
+        data = _read_save_dictionary(_backup_path_for_slot(slot))
+        if data.is_empty():
+            return false
+        _status("Recovered backup for slot %d" % slot)
+    if not data.has("house") or not data.has("household"):
         return false
-    var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
-    if file == null:
-        return false
-    var parsed = JSON.parse_string(file.get_as_text())
-    file.close()
-    if not (parsed is Dictionary):
-        return false
-    build_system.deserialize(parsed.get("house", {}))
-    household.deserialize(parsed.get("household", {}))
-    world_day = int(parsed.get("day", 1))
-    world_minutes = float(parsed.get("minutes", 480.0))
+    build_system.deserialize(data.get("house", {}))
+    household.deserialize(data.get("household", {}))
+    world_day = int(data.get("day", 1))
+    world_minutes = float(data.get("minutes", 480.0))
+    current_save_slot = slot
+    var settings: Dictionary = data.get("settings", {})
+    if audio_manager:
+        audio_manager.set_music_enabled(bool(settings.get("music", true)))
+        audio_manager.set_sfx_enabled(bool(settings.get("sfx", true)))
     build_mode = false
     build_tray.visible = false
     build_button.visible = true
     life_button.visible = true
     _refresh_family()
     _refresh_needs_panel()
+    _refresh_money()
     return true
+
+func _read_save_dictionary(path: String) -> Dictionary:
+    if not FileAccess.file_exists(path):
+        return {}
+    var file := FileAccess.open(path, FileAccess.READ)
+    if file == null:
+        return {}
+    var raw_text := file.get_as_text()
+    file.close()
+    var parsed = JSON.parse_string(raw_text)
+    if parsed is Dictionary:
+        return parsed as Dictionary
+    return {}
 
 func _button(text_value: String, callback: Callable, size := Vector2(90, 48)) -> Button:
     var button := Button.new()
