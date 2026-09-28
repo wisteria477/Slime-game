@@ -41,6 +41,7 @@ var appearance: Dictionary = {
 }
 var personality := "Bubbly"
 var habits: Array[String] = []
+var habit_strengths: Dictionary = {}
 var traits := {"playful": 0.5, "social": 0.5, "tidy": 0.5, "sleepy": 0.5}
 var needs := {"hunger": 88.0, "energy": 90.0, "hygiene": 88.0, "fun": 90.0, "social": 88.0, "comfort": 90.0, "bladder": 92.0}
 var relationships: Dictionary = {}
@@ -94,6 +95,9 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     age_stage = stage
     personality = personality_value
     habits = habits_value.duplicate()
+    habit_strengths.clear()
+    for habit in habits:
+        habit_strengths[habit] = 2.0
     if not appearance_value.is_empty():
         appearance = appearance_value.duplicate(true)
     build_system = build_ref
@@ -161,6 +165,7 @@ func serialize() -> Dictionary:
         "appearance": appearance.duplicate(true),
         "personality": personality,
         "habits": habits.duplicate(),
+        "habit_strengths": habit_strengths.duplicate(true),
         "traits": traits.duplicate(true),
         "needs": needs.duplicate(true),
         "relationships": relationships.duplicate(true),
@@ -196,6 +201,10 @@ func restore(data: Dictionary) -> void:
     habits.clear()
     for habit in data.get("habits", []):
         habits.append(String(habit))
+    habit_strengths = data.get("habit_strengths", {}).duplicate(true)
+    for habit in habits:
+        if not habit_strengths.has(habit):
+            habit_strengths[habit] = 2.0
     traits = data.get("traits", traits).duplicate(true)
     needs = data.get("needs", needs).duplicate(true)
     relationships = data.get("relationships", {}).duplicate(true)
@@ -691,7 +700,8 @@ func _priority_score(key: String) -> float:
     score += float(personality_bonuses.get(key, 0.0))
     for habit in habits:
         var habit_bonuses: Dictionary = HABIT_NEED_BONUS.get(habit, {})
-        score += float(habit_bonuses.get(key, 0.0))
+        var habit_power := clampf(float(habit_strengths.get(habit, 1.0)), 1.0, 5.0)
+        score += float(habit_bonuses.get(key, 0.0)) * (0.72 + habit_power * 0.14)
     if need_value < 45.0:
         score += 35.0
     elif need_value < 65.0:
@@ -755,6 +765,7 @@ func _choose_next_goal() -> void:
             return
 
     if habits.has("Wanderer") or rng.randf() < 0.72:
+        _record_habit_action("wander")
         var target := build_system.random_walkable_cell(rng)
         current_activity = "Exploring" if habits.has("Wanderer") else "Wandering"
         _set_path_to(target)
@@ -890,6 +901,7 @@ func _perform_action(delta: float) -> void:
     if action_kind in ["hunger", "energy", "hygiene", "fun", "social", "comfort", "bladder"]:
         action_finished = action_finished or float(needs.get(action_kind, 0.0)) >= 96.0
     if action_finished:
+        _record_habit_action(action_kind)
         if action_kind == "hunger":
             add_inventory_item("Prepared Meal", 1)
             add_moodlet("Ate a Meal", "Happy", 3.0 + float(skill_level("cooking")) * 0.4, 12.0)
@@ -1100,7 +1112,7 @@ func profile_detail_text() -> String:
     var want_text := "No current want"
     if not wants.is_empty():
         want_text = String(wants[0].get("text", ""))
-    return "%s • %s • %s %d • %s" % [emotion, aspiration, best_skill.capitalize(), best_level, want_text]
+    return "%s • %s • %s %d • %s • %s" % [emotion, aspiration, best_skill.capitalize(), best_level, want_text, habit_summary()]
 
 func activity_text() -> String:
     if not secondary_activity.is_empty():
@@ -1114,8 +1126,54 @@ func activity_text() -> String:
 func profile_text() -> String:
     var parts: Array[String] = [personality]
     for habit in habits:
-        parts.append(habit)
+        var strength := float(habit_strengths.get(habit, 1.0))
+        var marker := ""
+        if strength >= 4.0:
+            marker = " ★"
+        elif strength >= 3.0:
+            marker = " +"
+        parts.append(habit + marker)
     return " • ".join(parts)
+
+func _record_habit_action(kind: String) -> void:
+    var habit := ""
+    match kind:
+        "hunger":
+            habit = "Snacky"
+        "energy":
+            habit = "Napper"
+        "hygiene", "clean_object":
+            habit = "Tidy Routine"
+        "fun":
+            habit = "Toy Lover"
+        "social", "care_baby":
+            habit = "Chatty"
+        "comfort":
+            habit = "Cozy Seeker"
+        "wander":
+            habit = "Wanderer"
+        _:
+            return
+
+    var current := float(habit_strengths.get(habit, 0.0))
+    current = minf(5.0, current + 0.20)
+    habit_strengths[habit] = current
+
+    if not habits.has(habit) and current >= 1.6 and habits.size() < 4:
+        habits.append(habit)
+        add_moodlet("Picked up habit: %s" % habit, "Inspired", 7.0, 24.0)
+        satisfaction += 20
+
+    if current >= 4.0:
+        routine_memory["mastered_habit_%s" % habit] = true
+
+func habit_summary() -> String:
+    if habits.is_empty():
+        return "No established habits"
+    var parts: Array[String] = []
+    for habit in habits:
+        parts.append("%s %.1f/5" % [habit, float(habit_strengths.get(habit, 1.0))])
+    return " · ".join(parts)
 
 func _action_label(key: String) -> String:
     return {
