@@ -1636,11 +1636,11 @@ func _populate_build_tools() -> void:
     for tool in _build_tools_for_category():
         if not query.is_empty() and not tool.to_lower().contains(query):
             continue
-        var price := build_system.tool_cost(tool)
-        var label := tool.capitalize()
+        var price: int = build_system.tool_cost(tool)
+        var label: String = tool.capitalize()
         if price > 0:
             label += "\n◉ %d" % price
-        var tool_button := _button(label, _choose_tool.bind(tool), Vector2(116, 54))
+        var tool_button: Button = _button(label, _choose_tool.bind(tool), Vector2(116, 54))
         tool_button.add_theme_font_size_override("font_size", 13)
         build_row.add_child(tool_button)
 
@@ -1670,7 +1670,7 @@ func _undo_build() -> void:
     if build_history.size() <= 1:
         _status("Nothing to undo")
         return
-    var current := build_history.pop_back()
+    var current: Dictionary = build_history.pop_back()
     build_redo.append(current)
     _restore_build_snapshot(build_history.back())
     _status("Undo")
@@ -1679,14 +1679,14 @@ func _redo_build() -> void:
     if build_redo.is_empty():
         _status("Nothing to redo")
         return
-    var snapshot := build_redo.pop_back()
+    var snapshot: Dictionary = build_redo.pop_back()
     build_history.append(snapshot)
     _restore_build_snapshot(snapshot)
     _status("Redo")
 
 func _cycle_palette() -> void:
     _record_build_history()
-    var name := build_system.cycle_palette()
+    var name: String = build_system.cycle_palette()
     _status("Palette: %s" % name)
 
 func _choose_tool(tool: String) -> void:
