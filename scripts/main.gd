@@ -40,6 +40,7 @@ var last_action_signature := ""
 var context_panel: PanelContainer
 var context_title: Label
 var context_box: VBoxContainer
+var object_marker: MeshInstance3D
 var build_button: Button
 var baby_button: Button
 var build_tray: PanelContainer
@@ -99,6 +100,7 @@ var last_viewport_size := Vector2.ZERO
 func _ready() -> void:
     Engine.max_fps = 60
     _make_environment()
+    _make_object_marker()
     audio_manager = SlimeAudio.new()
     audio_manager.name = "Audio"
     add_child(audio_manager)
@@ -325,6 +327,22 @@ func _make_environment() -> void:
     sun.light_energy = 0.72
     sun.shadow_enabled = true
     add_child(sun)
+
+func _make_object_marker() -> void:
+    object_marker = MeshInstance3D.new()
+    object_marker.name = "ObjectSelectionMarker"
+    var mesh := CylinderMesh.new()
+    mesh.top_radius = 0.70
+    mesh.bottom_radius = 0.70
+    mesh.height = 0.025
+    object_marker.mesh = mesh
+    var material := StandardMaterial3D.new()
+    material.albedo_color = Color(0.42, 0.94, 0.90, 0.38)
+    material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    object_marker.material_override = material
+    object_marker.visible = false
+    add_child(object_marker)
 
 func _apply_platform_profile() -> void:
     var mobile := OS.get_name() == "Android" or OS.get_name() == "iOS" or OS.has_feature("web")
@@ -1640,6 +1658,34 @@ func _selection_changed(_slime) -> void:
     _refresh_family()
     _refresh_needs_panel()
 
+func _emotion_color(emotion: String) -> Color:
+    return {
+        "Happy": Color("8fd6b2"),
+        "Playful": Color("f2b5d5"),
+        "Inspired": Color("b8a9ee"),
+        "Focused": Color("8fb8d8"),
+        "Energized": Color("f0c873"),
+        "Sad": Color("8da7c9"),
+        "Angry": Color("dc8c82"),
+        "Embarrassed": Color("d9a2b2"),
+        "Uncomfortable": Color("c4aa82"),
+        "Tired": Color("9da3b0"),
+    }.get(emotion, Color("9bc8c7"))
+
+func _next_obligation_text(slime: SlimeAgent) -> String:
+    if slime.age_stage in ["child", "teen"]:
+        return "School • 7:00 AM"
+    if slime.career != "None":
+        var info: Dictionary = SlimeLifeRules.CAREERS.get(slime.career, {})
+        if not info.is_empty():
+            var start_hour := int(info.get("start", 0))
+            var suffix := "AM" if start_hour < 12 else "PM"
+            var display_hour := start_hour % 12
+            if display_hour == 0:
+                display_hour = 12
+            return "%s • %d %s" % [slime.career, display_hour, suffix]
+    return ""
+
 func _refresh_needs_panel() -> void:
     if needs_row == null:
         return
@@ -1674,8 +1720,15 @@ func _refresh_needs_values() -> void:
     var slime := household.selected_slime()
     if slime == null:
         return
-    needs_title.text = "%s · %s" % [slime.display_name, slime.age_stage]
-    needs_profile.text = "%s   •   %s" % [slime.profile_text(), slime.activity_text()]
+    needs_title.text = "● %s · %s · %s" % [slime.display_name, slime.age_stage.capitalize(), slime.emotion]
+    needs_title.add_theme_color_override("font_color", slime.slime_color.darkened(0.45))
+    var obligation := _next_obligation_text(slime)
+    needs_profile.text = slime.activity_text()
+    if not obligation.is_empty():
+        needs_profile.text += "   •   " + obligation
+    if needs_expanded:
+        needs_profile.text += "\n" + slime.profile_text()
+    needs_panel.add_theme_stylebox_override("panel", _panel_style(_emotion_color(slime.emotion).darkened(0.05), 26))
     for key in NEEDS:
         var bar := needs_row.find_child("Need_%s" % key, true, false)
         if bar is ProgressBar:
@@ -1751,6 +1804,8 @@ func _remove_selected_queue(index: int) -> void:
 func _hide_context() -> void:
     if context_panel:
         context_panel.visible = false
+    if object_marker:
+        object_marker.visible = false
 
 func _place_context(screen_pos: Vector2) -> void:
     var viewport := get_viewport().get_visible_rect().size
@@ -1774,6 +1829,10 @@ func _show_object_context(item: Dictionary, screen_pos: Vector2) -> void:
     _clear_context_buttons()
     var kind := String(item.get("type", "object"))
     context_title.text = kind.capitalize()
+    var raw_cell: Array = item.get("cell", [0, 0])
+    if object_marker:
+        object_marker.position = build_system.cell_to_world(Vector2i(int(raw_cell[0]), int(raw_cell[1]))) + Vector3(0, 0.045, 0)
+        object_marker.visible = true
     var options := build_system.interaction_options_for_type(kind)
     for option in options:
         var label := String(option.get("label", "Use"))
