@@ -131,7 +131,7 @@ func tick_world(day: int, hour: int, minute: int, delta: float) -> void:
             continue
         var end_hour := int(info.get("end", -1))
         if hour == end_hour and minute == 0:
-            var pay := int(info.get("pay", 0)) + max(0, slime.career_level - 1) * 18
+            var pay: int = int(info.get("pay", 0)) + maxi(0, slime.career_level - 1) * 18
             funds += pay
             slime.career_xp += 22.0
             slime.add_moodlet("Payday", "Happy", 6.0, 18.0)
