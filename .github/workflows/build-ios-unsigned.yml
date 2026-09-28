@@ -1,0 +1,135 @@
+name: Build iPhone IPA (unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "project.godot"
+      - "export_presets.cfg"
+      - "scenes/**"
+      - "scripts/**"
+      - "assets/**"
+      - "ci/**"
+      - ".github/workflows/build-ios-unsigned.yml"
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: 4.7.2-stable
+  GODOT_TEMPLATE_DIR: 4.7.2.stable
+  IOS_PRESET: iOS
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Static project validation
+        run: python3 ci/validate_project.py
+
+      - name: Download Godot 4.7.2 for macOS
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_macos.universal.zip"             -o godot.zip
+          unzip -q godot.zip -d godot
+          test -x godot/Godot.app/Contents/MacOS/Godot
+          godot/Godot.app/Contents/MacOS/Godot --version
+
+      - name: Restore Godot export templates cache
+        id: templates-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Application Support/Godot/export_templates/${{ env.GODOT_TEMPLATE_DIR }}
+          key: godot-${{ env.GODOT_VERSION }}-ios-export-templates-v1
+
+      - name: Install Godot export templates
+        if: steps.templates-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fL --retry 3             "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz"             -o templates.tpz
+          rm -rf /tmp/godot-export-templates
+          mkdir -p /tmp/godot-export-templates
+          unzip -q templates.tpz -d /tmp/godot-export-templates
+          target="$HOME/Library/Application Support/Godot/export_templates/${GODOT_TEMPLATE_DIR}"
+          mkdir -p "$target"
+          cp -R /tmp/godot-export-templates/templates/. "$target/"
+          test -f "$target/ios.zip"
+
+      - name: Import project and compile scripts
+        run: |
+          set -o pipefail
+          godot/Godot.app/Contents/MacOS/Godot --headless --editor --path . --quit 2>&1 | tee godot-import.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|Failed to load script" godot-import.log; then
+            echo "Godot script/import errors detected"
+            exit 1
+          fi
+
+      - name: Boot game smoke test
+        run: |
+          set -o pipefail
+          godot/Godot.app/Contents/MacOS/Godot --headless --path . --quit-after 3 2>&1 | tee godot-boot.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|Failed to load script" godot-boot.log; then
+            echo "Godot runtime script errors detected"
+            exit 1
+          fi
+
+      - name: Export iOS Xcode project
+        run: |
+          set -o pipefail
+          rm -rf build/ios
+          mkdir -p build/ios
+          godot/Godot.app/Contents/MacOS/Godot             --headless --path .             --export-release "${IOS_PRESET}" "build/ios/SlimeLife.zip" 2>&1 | tee godot-ios-export.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|Export failed|ERROR:" godot-ios-export.log; then
+            echo "Godot iOS export errors detected"
+            exit 1
+          fi
+          find build/ios -maxdepth 3 -print
+          PROJECT=$(find build/ios -maxdepth 3 -name '*.xcodeproj' -print -quit)
+          test -n "$PROJECT"
+          echo "XCODE_PROJECT=$PROJECT" >> "$GITHUB_ENV"
+
+      - name: Detect Xcode scheme
+        run: |
+          xcodebuild -project "$XCODE_PROJECT" -list -json > build/ios/xcode-list.json
+          SCHEME=$(python3 - <<'PY'
+          import json
+          data=json.load(open('build/ios/xcode-list.json'))
+          schemes=data.get('project',{}).get('schemes',[])
+          if not schemes:
+              raise SystemExit('No Xcode scheme found')
+          print(schemes[0])
+          PY
+          )
+          echo "XCODE_SCHEME=$SCHEME" >> "$GITHUB_ENV"
+          echo "Using Xcode project: $XCODE_PROJECT"
+          echo "Using Xcode scheme: $SCHEME"
+
+      - name: Build unsigned iPhone app
+        run: |
+          set -o pipefail
+          xcodebuild             -project "$XCODE_PROJECT"             -scheme "$XCODE_SCHEME"             -configuration Release             -sdk iphoneos             -destination 'generic/platform=iOS'             -derivedDataPath build/ios/DerivedData             CODE_SIGNING_ALLOWED=NO             CODE_SIGNING_REQUIRED=NO             CODE_SIGN_IDENTITY=""             DEVELOPMENT_TEAM=""             build | tee build/ios/xcode-build.log
+
+      - name: Package unsigned IPA
+        run: |
+          APP=$(find build/ios/DerivedData/Build/Products -type d -path '*iphoneos/*.app' -print -quit)
+          test -n "$APP"
+          rm -rf build/ios/Payload
+          mkdir -p build/ios/Payload
+          cp -R "$APP" build/ios/Payload/
+          (cd build/ios && /usr/bin/zip -qry SlimeLife-unsigned.ipa Payload)
+          test -s build/ios/SlimeLife-unsigned.ipa
+          echo "Unsigned IPA size:"
+          ls -lh build/ios/SlimeLife-unsigned.ipa
+          /usr/bin/unzip -l build/ios/SlimeLife-unsigned.ipa | head -40
+
+      - name: Upload iPhone IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SlimeLife-iPhone-unsigned
+          path: build/ios/SlimeLife-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
