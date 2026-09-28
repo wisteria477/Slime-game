@@ -477,7 +477,7 @@ func _build_ui() -> void:
     family_panel.offset_right = -18
     family_panel.offset_top = 18
     family_panel.offset_bottom = 86
-    family_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.40, 0.66, 0.68, 0.96), 32))
+    family_panel.add_theme_stylebox_override("panel", _puddle_style(Color(0.40, 0.66, 0.68, 0.96)))
     family_panel.mouse_filter = Control.MOUSE_FILTER_STOP
     root_ui.add_child(family_panel)
 
@@ -534,7 +534,7 @@ func _build_ui() -> void:
     needs_panel.offset_right = -180
     needs_panel.offset_top = -96
     needs_panel.offset_bottom = -18
-    needs_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.55, 0.76, 0.77, 0.97), 30))
+    needs_panel.add_theme_stylebox_override("panel", _puddle_style(Color(0.55, 0.76, 0.77, 0.97)))
     needs_panel.mouse_filter = Control.MOUSE_FILTER_STOP
     root_ui.add_child(needs_panel)
     var needs_box := VBoxContainer.new()
@@ -672,7 +672,7 @@ func _build_ui() -> void:
 
     context_panel = PanelContainer.new()
     context_panel.custom_minimum_size = Vector2(250, 0)
-    context_panel.add_theme_stylebox_override("panel", _panel_style(Color(0.88, 0.96, 0.94, 0.985), 24))
+    context_panel.add_theme_stylebox_override("panel", _puddle_style(Color(0.88, 0.96, 0.94, 0.985)))
     context_panel.mouse_filter = Control.MOUSE_FILTER_STOP
     context_panel.visible = false
     root_ui.add_child(context_panel)
@@ -1863,7 +1863,7 @@ func _refresh_needs_values() -> void:
         needs_profile.text += "   •   " + obligation
     if needs_expanded:
         needs_profile.text += "\n" + slime.profile_text()
-    needs_panel.add_theme_stylebox_override("panel", _panel_style(_emotion_color(slime.emotion).darkened(0.05), 26))
+    needs_panel.add_theme_stylebox_override("panel", _puddle_style(_emotion_color(slime.emotion).darkened(0.05)))
     for key in NEEDS:
         var bar := needs_row.find_child("Need_%s" % key, true, false)
         if bar is ProgressBar:
@@ -2164,6 +2164,24 @@ func _style_text_field(field: LineEdit) -> void:
     field.add_theme_color_override("font_placeholder_color", Color(0.24, 0.38, 0.40, 0.65))
     field.add_theme_stylebox_override("normal", _panel_style(Color(0.94, 0.98, 0.97, 1.0), 14))
     field.add_theme_stylebox_override("focus", _panel_style(Color(1.0, 1.0, 1.0, 1.0), 14))
+
+func _puddle_style(color: Color) -> StyleBoxFlat:
+    var style := StyleBoxFlat.new()
+    style.bg_color = color
+    style.corner_radius_top_left = 34
+    style.corner_radius_top_right = 46
+    style.corner_radius_bottom_left = 42
+    style.corner_radius_bottom_right = 26
+    style.border_width_left = 2
+    style.border_width_top = 2
+    style.border_width_right = 2
+    style.border_width_bottom = 2
+    style.border_color = Color(0.14, 0.27, 0.29, 0.30)
+    style.content_margin_left = 12
+    style.content_margin_right = 12
+    style.content_margin_top = 8
+    style.content_margin_bottom = 8
+    return style
 
 func _panel_style(color: Color, radius: int) -> StyleBoxFlat:
     var style := StyleBoxFlat.new()
