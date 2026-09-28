@@ -260,6 +260,71 @@ func find_first_furniture(kinds: Array[String], from_cell: Vector2i) -> Dictiona
             best = result
     return best
 
+
+func furniture_at_cell(cell: Vector2i) -> Dictionary:
+    for item in furniture:
+        var raw: Array = item.get("cell", [999, 999])
+        if Vector2i(int(raw[0]), int(raw[1])) == cell:
+            return item
+    return {}
+
+func interaction_target_for_item(item: Dictionary, from_cell: Vector2i) -> Vector2i:
+    if item.is_empty():
+        return from_cell
+    var raw: Array = item.get("cell", [from_cell.x, from_cell.y])
+    var item_cell := Vector2i(int(raw[0]), int(raw[1]))
+    var best := from_cell
+    var best_length := 999999
+    for candidate in _neighbors(item_cell):
+        if not is_walkable(candidate):
+            continue
+        var route := path_between(from_cell, candidate)
+        if route.is_empty() and candidate != from_cell:
+            continue
+        if route.size() < best_length:
+            best_length = route.size()
+            best = candidate
+    return best
+
+func interaction_options_for_type(kind: String) -> Array[Dictionary]:
+    match kind:
+        "bed":
+            return [
+                {"label":"Sleep", "action":"sleep"},
+                {"label":"Nap", "action":"sleep"},
+                {"label":"Relax", "action":"relax"},
+            ]
+        "stove":
+            return [{"label":"Cook Meal", "action":"cook"}]
+        "fridge", "food":
+            return [{"label":"Grab Food", "action":"eat"}]
+        "toilet":
+            return [{"label":"Use Bathroom", "action":"bathroom"}]
+        "bath":
+            return [{"label":"Take Bath", "action":"bathe"}]
+        "sink":
+            return [
+                {"label":"Wash Up", "action":"wash_up"},
+                {"label":"Clean Sink", "action":"clean_object"},
+            ]
+        "sofa":
+            return [{"label":"Relax", "action":"relax"}]
+        "toy":
+            return [{"label":"Play / Hobby", "action":"hobby"}]
+        "bookshelf":
+            return [{"label":"Read", "action":"hobby"}]
+        "desk":
+            return [{"label":"Creative Project", "action":"hobby"}]
+        "workbench":
+            return [
+                {"label":"Tinker", "action":"hobby"},
+                {"label":"Repair", "action":"repair_object"},
+            ]
+        "table":
+            return [{"label":"Sit & Relax", "action":"relax"}]
+        _:
+            return []
+
 func serialize() -> Dictionary:
     var floor_data: Array = []
     var wall_data: Array = []
