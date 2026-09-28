@@ -29,6 +29,7 @@ const HABIT_NEED_BONUS := {
 
 var slime_id := ""
 var display_name := "Slime"
+var is_npc := false
 var age_stage := "adult"
 var parents: Array[String] = []
 var slime_color := Color("68d7ff")
@@ -139,6 +140,7 @@ func serialize() -> Dictionary:
     return {
         "id": slime_id,
         "name": display_name,
+        "is_npc": is_npc,
         "age_stage": age_stage,
         "parents": parents.duplicate(),
         "color": slime_color.to_html(true),
@@ -168,6 +170,7 @@ func serialize() -> Dictionary:
     }
 
 func restore(data: Dictionary) -> void:
+    is_npc = bool(data.get("is_npc", false))
     parents.clear()
     for p in data.get("parents", []):
         parents.append(String(p))
