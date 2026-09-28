@@ -172,6 +172,21 @@ func adult_slimes() -> Array[SlimeAgent]:
             result.append(slime)
     return result
 
+func find_needy_baby(caregiver_id: String) -> SlimeAgent:
+    var best: SlimeAgent = null
+    var lowest := 101.0
+    for slime in slimes:
+        if slime.slime_id == caregiver_id or slime.age_stage != "baby":
+            continue
+        for value in slime.needs.values():
+            var need_value := float(value)
+            if need_value < lowest:
+                lowest = need_value
+                best = slime
+    if lowest >= 58.0:
+        return null
+    return best
+
 func find_nearest_other(id_value: String, position: Vector3) -> SlimeAgent:
     var best: SlimeAgent = null
     var distance := INF
