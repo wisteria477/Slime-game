@@ -2,15 +2,6 @@ name: Build desktop and Android
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - "project.godot"
-      - "export_presets.cfg"
-      - "scenes/**"
-      - "scripts/**"
-      - "assets/**"
-      - ".github/workflows/build-platforms.yml"
 
 permissions:
   contents: read
