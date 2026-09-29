@@ -53,6 +53,11 @@ func _run() -> void:
         var round_eye_scale: Vector3 = a.face_base_scales.get("EyeL", Vector3.ZERO)
         var wide_eye_scale: Vector3 = b.face_base_scales.get("EyeL", Vector3.ZERO)
         _check(wide_eye_scale.y > round_eye_scale.y * 1.10, "Wide eye appearance should survive facial animation baselining")
+        var wide_eye_before_restore := wide_eye_scale
+        var b_snapshot := b.serialize()
+        b.restore(b_snapshot)
+        var wide_eye_after_restore: Vector3 = b.face_base_scales.get("EyeL", Vector3.ZERO)
+        _check(wide_eye_after_restore.distance_to(wide_eye_before_restore) < 0.0001, "restoring a save should not compound slime appearance scale")
     _check(build.find_furniture("bed", a.current_cell()).size() > 0, "starter home needs a reachable bed")
     _check(build.find_furniture("stove", a.current_cell()).size() > 0, "starter home needs a reachable stove")
     _check(build.find_furniture("toilet", a.current_cell()).size() > 0, "starter home needs a reachable toilet")
