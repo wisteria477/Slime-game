@@ -613,17 +613,49 @@ func _polish_imported_nim(model: Node) -> void:
 func _make_imported_core_glow() -> void:
     if visual_root == null:
         return
-    var core_mat := StandardMaterial3D.new()
-    core_mat.albedo_color = Color(1.0, 0.86, 0.50, 1.0)
-    core_mat.roughness = 0.26
-    core_mat.emission_enabled = true
-    core_mat.emission = Color(1.0, 0.76, 0.34)
-    core_mat.emission_energy_multiplier = 0.16
-    _blob("CoreSurface_0", Vector3(0.000, 0.315, 0.170), Vector3(0.064, 0.074, 0.040), core_mat)
-    _blob("CoreSurface_1", Vector3(-0.043, 0.302, 0.168), Vector3(0.045, 0.052, 0.035), core_mat)
-    _blob("CoreSurface_2", Vector3(0.043, 0.302, 0.168), Vector3(0.045, 0.052, 0.035), core_mat)
-    _blob("CoreSurface_3", Vector3(0.000, 0.354, 0.169), Vector3(0.044, 0.050, 0.034), core_mat)
 
+    var core := MeshInstance3D.new()
+    core.name = "CoreSurface"
+    var quad := QuadMesh.new()
+    quad.size = Vector2(0.25, 0.22)
+    core.mesh = quad
+    core.position = Vector3(0.0, 0.315, 0.205)
+    core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+    var shader := Shader.new()
+    shader.code = """
+shader_type spatial;
+render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;
+
+uniform vec4 core_color : source_color = vec4(1.0, 0.84, 0.48, 0.46);
+uniform float glow_strength = 0.28;
+
+float soft_blob(vec2 p, vec2 center, vec2 radius) {
+    vec2 d = (p - center) / radius;
+    float dist = length(d);
+    return 1.0 - smoothstep(0.58, 1.0, dist);
+}
+
+void fragment() {
+    vec2 uv = UV;
+    float cloud = 0.0;
+    cloud = max(cloud, soft_blob(uv, vec2(0.50, 0.53), vec2(0.28, 0.31)));
+    cloud = max(cloud, soft_blob(uv, vec2(0.34, 0.48), vec2(0.20, 0.23)));
+    cloud = max(cloud, soft_blob(uv, vec2(0.66, 0.48), vec2(0.20, 0.23)));
+    cloud = max(cloud, soft_blob(uv, vec2(0.50, 0.69), vec2(0.19, 0.20)));
+    float edge_softness = smoothstep(0.0, 0.16, cloud);
+    ALBEDO = core_color.rgb;
+    EMISSION = core_color.rgb * glow_strength * edge_softness;
+    ALPHA = core_color.a * cloud;
+}
+"""
+
+    var material := ShaderMaterial.new()
+    material.shader = shader
+    material.set_shader_parameter("core_color", Color(1.0, 0.84, 0.48, 0.46))
+    material.set_shader_parameter("glow_strength", 0.28)
+    core.material_override = material
+    visual_root.add_child(core)
 func _find_visual_node_by_names(names: Array) -> Node3D:
     if visual_root == null:
         return null
@@ -656,7 +688,7 @@ func _collect_visual_meshes(node: Node, exact_names: Array, prefixes: Array, out
 func _core_meshes() -> Array[MeshInstance3D]:
     var result: Array[MeshInstance3D] = []
     if visual_root:
-        _collect_visual_meshes(visual_root, ["Core"], ["Nim_InnerCore_", "CoreSurface_"], result)
+        _collect_visual_meshes(visual_root, ["Core", "CoreSurface"], ["Nim_InnerCore_"], result)
     return result
 
 func _find_animation_player(node: Node) -> AnimationPlayer:
@@ -928,6 +960,15 @@ func _style_core_material(material: StandardMaterial3D, core_style: String) -> v
         material.emission_energy_multiplier *= 2.15
 
 func _apply_core_style(core: MeshInstance3D, core_style: String) -> void:
+    if core.material_override is ShaderMaterial:
+        var shader_mat := core.material_override as ShaderMaterial
+        if core_style == "Cool":
+            shader_mat.set_shader_parameter("core_color", Color(0.52, 0.90, 1.0, 0.48))
+            shader_mat.set_shader_parameter("glow_strength", 0.30)
+        elif core_style == "Bright":
+            shader_mat.set_shader_parameter("core_color", Color(1.0, 0.86, 0.50, 0.58))
+            shader_mat.set_shader_parameter("glow_strength", 0.48)
+        return
     if core.material_override is StandardMaterial3D:
         _style_core_material(core.material_override as StandardMaterial3D, core_style)
         return
