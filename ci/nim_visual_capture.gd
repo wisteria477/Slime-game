@@ -133,6 +133,8 @@ func _run() -> void:
         var animation := player.get_animation(resolved)
         if animation:
             player.seek(animation.length * 0.42, true)
+        slime.emotion = "Fine" if state == "Idle" else state
+        slime._update_expression_visual()
         await process_frame
         await process_frame
         await process_frame
