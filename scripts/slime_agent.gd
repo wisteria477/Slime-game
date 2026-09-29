@@ -432,7 +432,7 @@ func _build_character() -> void:
             var model: Node = (packed as PackedScene).instantiate()
             model.name = "NimModel"
             model.scale = Vector3.ONE * 0.43
-            model.rotation_degrees.y = 180.0
+            model.rotation_degrees.y = 0.0
             visual_root.add_child(model)
             _tint_recursive(model)
             model_animation_player = _find_animation_player(model)
