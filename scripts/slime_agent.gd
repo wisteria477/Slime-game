@@ -549,7 +549,9 @@ func _tint_recursive(node: Node) -> void:
                 var copy := active.duplicate()
                 var material_name := String(active.resource_name)
                 if copy is StandardMaterial3D and (material_name.contains("Slime") or mesh_node.name.contains("Body") or mesh_node.name.contains("Bubble")):
-                    copy.albedo_color = slime_color
+                    var standard_copy := copy as StandardMaterial3D
+                    var authored_alpha := standard_copy.albedo_color.a
+                    standard_copy.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, authored_alpha)
                 mesh_node.set_surface_override_material(surface, copy)
     for child in node.get_children():
         _tint_recursive(child)
