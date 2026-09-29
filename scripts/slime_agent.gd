@@ -102,6 +102,8 @@ var base_visual_scale := Vector3.ONE
 var idle_phase := 0.0
 var face_base_scales: Dictionary = {}
 var face_base_rotations: Dictionary = {}
+var appearance_base_scales: Dictionary = {}
+var appearance_base_materials: Dictionary = {}
 var is_selected_visual := false
 
 func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref, personality_value := "Bubbly", habits_value: Array[String] = [], appearance_value: Dictionary = {}) -> void:
@@ -126,6 +128,7 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     wants = SlimeLifeRules.random_wants(rng, 3)
     fears = [SlimeLifeRules.random_fear(rng)]
     _build_character()
+    _capture_appearance_defaults()
     _apply_age_scale()
     _apply_appearance()
     _capture_face_defaults()
@@ -701,9 +704,41 @@ func _animate_current_action(now: float) -> void:
         _:
             pass
 
+func _capture_appearance_defaults() -> void:
+    appearance_base_scales.clear()
+    appearance_base_materials.clear()
+    if visual_root == null:
+        return
+    for node_name in ["EyeL", "EyeR", "AntennaTip"]:
+        var node := visual_root.get_node_or_null(node_name) as Node3D
+        if node:
+            appearance_base_scales[node_name] = node.scale
+    var core := visual_root.get_node_or_null("Core") as MeshInstance3D
+    if core and core.material_override:
+        appearance_base_materials["Core"] = core.material_override.duplicate(true)
+
+func _reset_appearance_defaults() -> void:
+    if visual_root == null:
+        return
+    for node_name in appearance_base_scales.keys():
+        var node := visual_root.get_node_or_null(String(node_name)) as Node3D
+        if node:
+            node.scale = appearance_base_scales[node_name]
+    var core := visual_root.get_node_or_null("Core") as MeshInstance3D
+    if core and appearance_base_materials.has("Core"):
+        var base_material = appearance_base_materials["Core"]
+        if base_material is Material:
+            core.material_override = (base_material as Material).duplicate(true)
+
 func _apply_appearance() -> void:
     if visual_root == null:
         return
+
+    # Appearance application must be idempotent. Save restoration and creator
+    # previews may apply the same choices more than once.
+    _reset_appearance_defaults()
+    base_visual_scale = Vector3.ONE * (0.64 if age_stage == "baby" else 1.0)
+
     var size_name := String(appearance.get("size", "Standard"))
     var size_mult := 1.0
     if size_name == "Tiny":
@@ -731,7 +766,7 @@ func _apply_appearance() -> void:
             mat.emission = Color("8be7ff")
             mat.albedo_color = Color(0.52, 0.90, 1.0, 0.55)
         elif core_style == "Bright":
-            mat.emission_energy_multiplier = 1.35
+            mat.emission_energy_multiplier *= 2.15
 
     var antenna_tip := visual_root.get_node_or_null("AntennaTip") as Node3D
     if antenna_tip:
