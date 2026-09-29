@@ -614,16 +614,16 @@ func _make_imported_core_glow() -> void:
     if visual_root == null:
         return
     var core_mat := StandardMaterial3D.new()
-    core_mat.albedo_color = Color(1.0, 0.84, 0.46, 0.68)
-    core_mat.roughness = 0.22
+    core_mat.albedo_color = Color(1.0, 0.86, 0.56, 0.34)
+    core_mat.roughness = 0.28
     core_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    core_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     core_mat.emission_enabled = true
-    core_mat.emission = Color(1.0, 0.72, 0.28)
-    core_mat.emission_energy_multiplier = 0.55
-    _blob("CoreSurface_0", Vector3(0.000, 0.310, 0.205), Vector3(0.072, 0.086, 0.018), core_mat)
-    _blob("CoreSurface_1", Vector3(-0.050, 0.300, 0.208), Vector3(0.052, 0.062, 0.016), core_mat)
-    _blob("CoreSurface_2", Vector3(0.050, 0.298, 0.208), Vector3(0.052, 0.062, 0.016), core_mat)
-    _blob("CoreSurface_3", Vector3(0.000, 0.365, 0.205), Vector3(0.054, 0.058, 0.016), core_mat)
+    core_mat.emission = Color(1.0, 0.75, 0.34)
+    core_mat.emission_energy_multiplier = 0.24
+    _blob("CoreSurface_0", Vector3(0.000, 0.315, 0.205), Vector3(0.086, 0.094, 0.012), core_mat)
+    _blob("CoreSurface_1", Vector3(-0.038, 0.304, 0.208), Vector3(0.058, 0.064, 0.011), core_mat)
+    _blob("CoreSurface_2", Vector3(0.038, 0.304, 0.208), Vector3(0.058, 0.064, 0.011), core_mat)
 
 func _find_visual_node_by_names(names: Array) -> Node3D:
     if visual_root == null:
@@ -1040,10 +1040,58 @@ func _update_expression_visual() -> void:
         eye_l.scale.y *= 0.16
         eye_r.scale.y *= 0.16
 
-    # The production GLB already authors full facial/body emotion clips through
-    # the rig. Keep the lightweight blink/customization layer, but do not stack
-    # the fallback's procedural emotion poses on top of those clips.
+    # The production GLB supplies the full-body emotion motion. Reinforce only
+    # the face here because GLTF bone-axis conversion makes the authored facial
+    # bone scaling subtler than it was in Blender.
     if model_animation_player != null:
+        match emotion:
+            "Happy":
+                eye_l.scale.y *= 0.68
+                eye_r.scale.y *= 0.68
+                eye_l.rotation.z -= 0.05
+                eye_r.rotation.z += 0.05
+                mouth.scale.x *= 1.16
+                mouth.scale.y *= 0.82
+            "Playful":
+                eye_l.scale.y *= 0.72
+                eye_r.scale.y *= 0.48
+                eye_l.rotation.z -= 0.08
+                eye_r.rotation.z -= 0.08
+                mouth.scale.x *= 1.20
+                mouth.scale.y *= 0.88
+            "Sad":
+                eye_l.scale.y *= 0.78
+                eye_r.scale.y *= 0.78
+                eye_l.rotation.z += 0.12
+                eye_r.rotation.z -= 0.12
+                mouth.scale.x *= 0.80
+                mouth.scale.y *= 0.55
+            "Angry":
+                eye_l.scale.y *= 0.58
+                eye_r.scale.y *= 0.58
+                eye_l.rotation.z += 0.23
+                eye_r.rotation.z -= 0.23
+                mouth.scale.x *= 0.86
+                mouth.scale.y *= 0.48
+            "Scared":
+                eye_l.scale *= 1.10
+                eye_r.scale *= 1.10
+                mouth.scale.x *= 0.78
+                mouth.scale.y *= 1.28
+            "Tired":
+                eye_l.scale.y *= 0.36
+                eye_r.scale.y *= 0.36
+                eye_l.rotation.z += 0.04
+                eye_r.rotation.z -= 0.04
+                mouth.scale.x *= 0.78
+                mouth.scale.y *= 0.48
+            "Flirty":
+                eye_l.scale.y *= 0.28
+                eye_r.scale.y *= 0.82
+                mouth.scale.x *= 1.08
+                mouth.scale.y *= 0.70
+            _:
+                pass
         return
 
     match emotion:
