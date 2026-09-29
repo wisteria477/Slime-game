@@ -435,6 +435,7 @@ func _build_character() -> void:
             model.rotation_degrees.y = 0.0
             visual_root.add_child(model)
             _tint_recursive(model)
+            _polish_imported_nim(model)
             model_animation_player = _find_animation_player(model)
             _play_model_animation_if_available("Idle")
         else:
@@ -555,6 +556,63 @@ func _tint_recursive(node: Node) -> void:
                 mesh_node.set_surface_override_material(surface, copy)
     for child in node.get_children():
         _tint_recursive(child)
+
+func _polish_imported_nim(model: Node) -> void:
+    # The authored GLB contains the silhouette/rig/expressions. These runtime
+    # material and presentation adjustments keep it readable under the game's
+    # mobile-friendly Godot lighting without baking camera-specific tricks into
+    # the source asset.
+    var body := _find_visual_node_by_names_from(model, ["SK_Nim_Body"]) as MeshInstance3D
+    if body and body.mesh:
+        body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+        for surface in range(body.mesh.get_surface_count()):
+            var active := body.get_active_material(surface)
+            if active is StandardMaterial3D:
+                var tuned := active.duplicate(true) as StandardMaterial3D
+                var body_color := slime_color.darkened(0.10)
+                tuned.albedo_color = Color(body_color.r, body_color.g, body_color.b, 0.90)
+                tuned.roughness = 0.14
+                tuned.metallic = 0.0
+                tuned.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+                body.set_surface_override_material(surface, tuned)
+
+    # These authored face pieces sit just above the jelly surface. Let the body
+    # lighting create depth; tiny hard shadows from them read as dark stickers.
+    for detail_name in [
+        "Nim_Eye_L", "Nim_Eye_R", "Nim_Mouth",
+        "Nim_Cheek_L", "Nim_Cheek_R",
+        "Nim_EyeHighlight_L", "Nim_EyeHighlight_R",
+        "Nim_EyeHighlight2_L", "Nim_EyeHighlight2_R",
+        "Nim_FloatingBubble"
+    ]:
+        var detail := _find_visual_node_by_names_from(model, [detail_name])
+        if detail is MeshInstance3D:
+            (detail as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+    # The white mesh shine patches were useful in Blender material preview but
+    # look like flat decals in Godot. Natural specular highlights are cleaner.
+    for shine_name in ["Nim_HeadShine_L", "Nim_HeadShine_Dot"]:
+        var shine := _find_visual_node_by_names_from(model, [shine_name])
+        if shine:
+            shine.visible = false
+
+    var mouth := _find_visual_node_by_names_from(model, ["Nim_Mouth"])
+    if mouth:
+        mouth.scale.z *= 0.38
+
+    # Keep the internal cloud warm but prevent its emission from blowing out the
+    # translucent body on lower-end/mobile renderers.
+    var core_meshes: Array[MeshInstance3D] = []
+    _collect_visual_meshes(model, [], ["Nim_InnerCore_"], core_meshes)
+    for core in core_meshes:
+        core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        if core.mesh:
+            for surface in range(core.mesh.get_surface_count()):
+                var core_active := core.get_active_material(surface)
+                if core_active is StandardMaterial3D:
+                    var core_mat := core_active.duplicate(true) as StandardMaterial3D
+                    core_mat.emission_energy_multiplier = minf(core_mat.emission_energy_multiplier, 0.75)
+                    core.set_surface_override_material(surface, core_mat)
 
 func _find_visual_node_by_names(names: Array) -> Node3D:
     if visual_root == null:
@@ -1406,7 +1464,7 @@ func _move_along_path() -> void:
     if habits.has("Slow Starter"):
         speed *= 0.88
     var direction := flat_delta.normalized()
-    var target_yaw := atan2(direction.x, direction.z) + PI
+    var target_yaw := atan2(direction.x, direction.z)
     rotation.y = lerp_angle(rotation.y, target_yaw, 0.18)
     velocity = direction * speed
     velocity.y = 0.0
@@ -1475,7 +1533,7 @@ func _perform_action(delta: float) -> void:
             var face_delta: Vector3 = other.global_position - global_position
             face_delta.y = 0.0
             if face_delta.length() > 0.05:
-                rotation.y = lerp_angle(rotation.y, atan2(face_delta.x, face_delta.z) + PI, 0.15)
+                rotation.y = lerp_angle(rotation.y, atan2(face_delta.x, face_delta.z), 0.15)
             needs["social"] = clampf(float(needs["social"]) + 8.0 * delta, 0.0, NEED_MAX)
             other.needs["social"] = clampf(float(other.needs["social"]) + 4.0 * delta, 0.0, NEED_MAX)
             relationships[other.slime_id] = float(relationships.get(other.slime_id, 0.0)) + 1.0 * delta
