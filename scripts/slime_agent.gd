@@ -478,6 +478,12 @@ func _make_fallback_slime() -> void:
     _blob("AntennaBase", Vector3(0.09, 1.88, 0.01), Vector3(0.16, 0.25, 0.15), jelly, Vector3(0, 0, -18))
     _blob("AntennaTip", Vector3(0.22, 2.04, 0.01), Vector3(0.14, 0.16, 0.14), jelly)
 
+    var bubble_mat := StandardMaterial3D.new()
+    bubble_mat.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, 0.60)
+    bubble_mat.roughness = 0.06
+    bubble_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    _blob("Bubble", Vector3(0.43, 1.91, -0.01), Vector3(0.11, 0.11, 0.11), bubble_mat)
+
     var eye_mat := StandardMaterial3D.new()
     eye_mat.albedo_color = Color("172437")
     eye_mat.roughness = 0.12
@@ -587,6 +593,8 @@ func _animate_idle() -> void:
 
     if not action_kind.is_empty() and path.is_empty():
         _animate_current_action(now)
+    elif path.is_empty() and horizontal_speed <= 0.08:
+        _animate_emotion_body(now)
 
     _animate_soft_parts(now, horizontal_speed > 0.08)
     _update_expression_visual()
@@ -596,10 +604,53 @@ func _animate_soft_parts(now: float, moving: bool) -> void:
         return
     var antenna_base := visual_root.get_node_or_null("AntennaBase") as Node3D
     var antenna_tip := visual_root.get_node_or_null("AntennaTip") as Node3D
+    var bubble := visual_root.get_node_or_null("Bubble") as Node3D
     if antenna_base:
         antenna_base.rotation_degrees.z = -18.0 + sin(now * 0.82) * (7.0 if moving else 3.0)
     if antenna_tip:
         antenna_tip.rotation_degrees.z = sin(now * 0.95 + 0.7) * (9.0 if moving else 4.0)
+    if bubble:
+        var drift_strength := 0.032 if moving else 0.018
+        bubble.position.x = 0.43 + sin(now * 0.56 + 1.1) * drift_strength
+        bubble.position.y = 1.91 + cos(now * 0.48 + 0.4) * (0.035 if moving else 0.022)
+
+func _animate_emotion_body(now: float) -> void:
+    # Nim's approved emotion sheet changes the whole jelly silhouette, not just
+    # the facial features. Keep these deformations restrained so gameplay
+    # remains readable and the same code also works with an authored GLB.
+    match emotion:
+        "Happy":
+            visual_root.position.y += maxf(0.0, sin(now * 0.85)) * 0.025
+            visual_root.rotation.z += sin(now * 0.62) * 0.016
+        "Playful":
+            visual_root.position.y += maxf(0.0, sin(now * 1.35)) * 0.035
+            visual_root.rotation.z += sin(now * 1.05) * 0.055
+        "Sad":
+            visual_root.scale.x *= 1.04
+            visual_root.scale.y *= 0.94
+            visual_root.scale.z *= 1.03
+            visual_root.position.y -= 0.015
+        "Angry":
+            visual_root.scale.x *= 1.035
+            visual_root.scale.y *= 1.025
+            visual_root.scale.z *= 0.985
+            visual_root.rotation.z += sin(now * 2.8) * 0.012
+        "Embarrassed":
+            visual_root.scale.x *= 0.97
+            visual_root.scale.y *= 0.965
+            visual_root.scale.z *= 0.97
+            visual_root.position.y -= 0.012
+        "Tired":
+            visual_root.scale.x *= 1.13
+            visual_root.scale.y *= 0.79
+            visual_root.scale.z *= 1.10
+            visual_root.position.y -= 0.035
+        "Energized":
+            var hop := maxf(0.0, sin(now * 1.65))
+            visual_root.position.y += hop * 0.050
+            visual_root.scale.y *= 1.0 + hop * 0.025
+        _:
+            pass
 
 func _animate_current_action(now: float) -> void:
     var beat := sin(now * 1.55)
