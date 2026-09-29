@@ -59,8 +59,9 @@ func _run() -> void:
     environment.background_mode = Environment.BG_COLOR
     environment.background_color = Color("dfeaf3")
     environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-    environment.ambient_light_color = Color("d9edff")
+    environment.ambient_light_color = Color("b6c8ca")
     environment.ambient_light_energy = 0.34
+    environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
     environment_node.environment = environment
     viewport.add_child(environment_node)
 
@@ -95,15 +96,15 @@ func _run() -> void:
     slime.set_physics_process(false)
 
     var key_light := DirectionalLight3D.new()
-    key_light.rotation_degrees = Vector3(-34.0, -28.0, 0.0)
-    key_light.light_energy = 0.78
-    key_light.shadow_enabled = true
+    key_light.rotation_degrees = Vector3(-52.0, -38.0, 0.0)
+    key_light.light_energy = 0.72
+    key_light.shadow_enabled = false
     viewport.add_child(key_light)
 
     var fill_light := OmniLight3D.new()
     fill_light.position = Vector3(-2.4, 2.4, 2.5)
     fill_light.light_color = Color("d9f3ff")
-    fill_light.light_energy = 0.52
+    fill_light.light_energy = 0.18
     fill_light.omni_range = 7.0
     viewport.add_child(fill_light)
 
