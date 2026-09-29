@@ -100,7 +100,7 @@ func _run() -> void:
     camera.fov = 34.0
     viewport.add_child(camera)
     camera.look_at(Vector3(0.0, 1.25, 0.0), Vector3.UP)
-    viewport.camera_3d = camera
+    camera.current = true
 
     var player := _find_animation_player(model)
     if player == null:
