@@ -556,6 +556,41 @@ func _tint_recursive(node: Node) -> void:
     for child in node.get_children():
         _tint_recursive(child)
 
+func _find_visual_node_by_names(names: Array) -> Node3D:
+    if visual_root == null:
+        return null
+    return _find_visual_node_by_names_from(visual_root, names)
+
+func _find_visual_node_by_names_from(node: Node, names: Array) -> Node3D:
+    if node is Node3D and names.has(String(node.name)):
+        return node as Node3D
+    for child in node.get_children():
+        var found := _find_visual_node_by_names_from(child, names)
+        if found:
+            return found
+    return null
+
+func _collect_visual_meshes(node: Node, exact_names: Array, prefixes: Array, output: Array[MeshInstance3D]) -> void:
+    if node is MeshInstance3D:
+        var mesh_node := node as MeshInstance3D
+        var node_name := String(mesh_node.name)
+        var matches := exact_names.has(node_name)
+        if not matches:
+            for prefix in prefixes:
+                if node_name.begins_with(String(prefix)):
+                    matches = true
+                    break
+        if matches:
+            output.append(mesh_node)
+    for child in node.get_children():
+        _collect_visual_meshes(child, exact_names, prefixes, output)
+
+func _core_meshes() -> Array[MeshInstance3D]:
+    var result: Array[MeshInstance3D] = []
+    if visual_root:
+        _collect_visual_meshes(visual_root, ["Core"], ["Nim_InnerCore_"], result)
+    return result
+
 func _find_animation_player(node: Node) -> AnimationPlayer:
     if node is AnimationPlayer:
         return node as AnimationPlayer
@@ -565,13 +600,26 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
             return found
     return null
 
+func _resolve_model_animation_name(requested: String) -> String:
+    if model_animation_player == null:
+        return ""
+    if model_animation_player.has_animation(requested):
+        return requested
+    var needle := requested.to_lower()
+    for candidate in model_animation_player.get_animation_list():
+        var candidate_name := String(candidate)
+        var lowered := candidate_name.to_lower()
+        if lowered == needle or lowered.ends_with("/" + needle) or lowered.ends_with("|" + needle):
+            return candidate_name
+    return ""
+
 func _play_model_animation_if_available(requested: String) -> void:
     if model_animation_player == null:
         return
-    var target := requested
-    if not model_animation_player.has_animation(target):
-        target = "Idle"
-    if not model_animation_player.has_animation(target):
+    var target := _resolve_model_animation_name(requested)
+    if target.is_empty():
+        target = _resolve_model_animation_name("Idle")
+    if target.is_empty():
         return
     if model_animation_name != target or not model_animation_player.is_playing():
         model_animation_player.play(target, 0.16)
@@ -636,8 +684,10 @@ func _animate_idle() -> void:
         visual_root.scale.z *= 1.0 + compression * 0.040
 
     if not action_kind.is_empty() and path.is_empty():
-        _animate_current_action(now)
-    elif path.is_empty() and horizontal_speed <= 0.08:
+        var authored_action := model_animation_player != null and action_kind in ["energy", "sleep", "fun", "hobby"]
+        if not authored_action:
+            _animate_current_action(now)
+    elif path.is_empty() and horizontal_speed <= 0.08 and model_animation_player == null:
         _animate_emotion_body(now)
 
     _animate_soft_parts(now, horizontal_speed > 0.08)
@@ -751,26 +801,76 @@ func _capture_appearance_defaults() -> void:
     appearance_base_materials.clear()
     if visual_root == null:
         return
-    for node_name in ["EyeL", "EyeR", "AntennaTip"]:
-        var node := visual_root.get_node_or_null(node_name) as Node3D
+
+    for aliases in [
+        ["EyeL", "Nim_Eye_L"],
+        ["EyeR", "Nim_Eye_R"],
+        ["AntennaTip", "Nim_Antenna"],
+    ]:
+        var node := _find_visual_node_by_names(aliases)
         if node:
-            appearance_base_scales[node_name] = node.scale
-    var core := visual_root.get_node_or_null("Core") as MeshInstance3D
-    if core and core.material_override:
-        appearance_base_materials["Core"] = core.material_override.duplicate(true)
+            var relative_path := String(visual_root.get_path_to(node))
+            appearance_base_scales[relative_path] = node.scale
+
+    for core in _core_meshes():
+        var relative_path := String(visual_root.get_path_to(core))
+        var snapshot := {}
+        if core.material_override:
+            snapshot["material_override"] = core.material_override.duplicate(true)
+        var surfaces: Array = []
+        if core.mesh:
+            for surface in range(core.mesh.get_surface_count()):
+                var active := core.get_active_material(surface)
+                surfaces.append(active.duplicate(true) if active else null)
+        snapshot["surfaces"] = surfaces
+        appearance_base_materials[relative_path] = snapshot
 
 func _reset_appearance_defaults() -> void:
     if visual_root == null:
         return
-    for node_name in appearance_base_scales.keys():
-        var node := visual_root.get_node_or_null(String(node_name)) as Node3D
+
+    for relative_path in appearance_base_scales.keys():
+        var node := visual_root.get_node_or_null(NodePath(String(relative_path))) as Node3D
         if node:
-            node.scale = appearance_base_scales[node_name]
-    var core := visual_root.get_node_or_null("Core") as MeshInstance3D
-    if core and appearance_base_materials.has("Core"):
-        var base_material = appearance_base_materials["Core"]
-        if base_material is Material:
-            core.material_override = (base_material as Material).duplicate(true)
+            node.scale = appearance_base_scales[relative_path]
+
+    for relative_path in appearance_base_materials.keys():
+        var core := visual_root.get_node_or_null(NodePath(String(relative_path))) as MeshInstance3D
+        if core == null:
+            continue
+        var snapshot: Dictionary = appearance_base_materials[relative_path]
+        if snapshot.has("material_override") and snapshot["material_override"] is Material:
+            core.material_override = (snapshot["material_override"] as Material).duplicate(true)
+        else:
+            core.material_override = null
+        var surfaces: Array = snapshot.get("surfaces", [])
+        if core.mesh:
+            for surface in range(core.mesh.get_surface_count()):
+                core.set_surface_override_material(surface, null)
+                if surface < surfaces.size() and surfaces[surface] is Material:
+                    core.set_surface_override_material(surface, (surfaces[surface] as Material).duplicate(true))
+
+func _style_core_material(material: StandardMaterial3D, core_style: String) -> void:
+    if core_style == "Cool":
+        material.emission_enabled = true
+        material.emission = Color("8be7ff")
+        material.albedo_color = Color(0.52, 0.90, 1.0, material.albedo_color.a)
+    elif core_style == "Bright":
+        material.emission_enabled = true
+        material.emission_energy_multiplier *= 2.15
+
+func _apply_core_style(core: MeshInstance3D, core_style: String) -> void:
+    if core.material_override is StandardMaterial3D:
+        _style_core_material(core.material_override as StandardMaterial3D, core_style)
+        return
+    if core.mesh == null:
+        return
+    for surface in range(core.mesh.get_surface_count()):
+        var active := core.get_active_material(surface)
+        if active is StandardMaterial3D:
+            var styled := active.duplicate(true) as StandardMaterial3D
+            _style_core_material(styled, core_style)
+            core.set_surface_override_material(surface, styled)
 
 func _apply_appearance() -> void:
     if visual_root == null:
@@ -789,8 +889,8 @@ func _apply_appearance() -> void:
         size_mult = 1.16
     base_visual_scale *= size_mult
 
-    var eye_l := visual_root.get_node_or_null("EyeL") as Node3D
-    var eye_r := visual_root.get_node_or_null("EyeR") as Node3D
+    var eye_l := _find_visual_node_by_names(["EyeL", "Nim_Eye_L"])
+    var eye_r := _find_visual_node_by_names(["EyeR", "Nim_Eye_R"])
     var eye_style := String(appearance.get("eyes", "Round"))
     if eye_l and eye_r:
         if eye_style == "Sleepy":
@@ -800,29 +900,41 @@ func _apply_appearance() -> void:
             eye_l.scale *= 1.18
             eye_r.scale *= 1.18
 
-    var core := visual_root.get_node_or_null("Core") as MeshInstance3D
-    if core and core.material_override is StandardMaterial3D:
-        var mat := core.material_override as StandardMaterial3D
-        var core_style := String(appearance.get("core", "Warm"))
-        if core_style == "Cool":
-            mat.emission = Color("8be7ff")
-            mat.albedo_color = Color(0.52, 0.90, 1.0, 0.55)
-        elif core_style == "Bright":
-            mat.emission_energy_multiplier *= 2.15
+    var core_style := String(appearance.get("core", "Warm"))
+    if core_style != "Warm":
+        for core in _core_meshes():
+            _apply_core_style(core, core_style)
 
-    var antenna_tip := visual_root.get_node_or_null("AntennaTip") as Node3D
-    if antenna_tip:
+    var antenna := _find_visual_node_by_names(["AntennaTip", "Nim_Antenna"])
+    if antenna:
         var antenna_style := String(appearance.get("antenna", "Curl"))
         if antenna_style == "Droplet":
-            antenna_tip.scale.y *= 1.45
+            antenna.scale.y *= 1.45 if String(antenna.name) == "AntennaTip" else 1.18
         elif antenna_style == "Bubble":
-            antenna_tip.scale *= 1.35
+            antenna.scale *= 1.35 if String(antenna.name) == "AntennaTip" else 1.15
+
+func _face_node_aliases(node_name: String) -> Array:
+    match node_name:
+        "EyeL":
+            return ["EyeL", "Nim_Eye_L"]
+        "EyeR":
+            return ["EyeR", "Nim_Eye_R"]
+        "Mouth":
+            return ["Mouth", "Nim_Mouth"]
+        "CheekL":
+            return ["CheekL", "Nim_Cheek_L"]
+        "CheekR":
+            return ["CheekR", "Nim_Cheek_R"]
+        _:
+            return [node_name]
 
 func _capture_face_defaults() -> void:
     if visual_root == null:
         return
+    face_base_scales.clear()
+    face_base_rotations.clear()
     for node_name in ["EyeL", "EyeR", "Mouth", "CheekL", "CheekR"]:
-        var node := visual_root.get_node_or_null(node_name) as Node3D
+        var node := _find_visual_node_by_names(_face_node_aliases(node_name))
         if node:
             face_base_scales[node_name] = node.scale
             face_base_rotations[node_name] = node.rotation
@@ -830,7 +942,7 @@ func _capture_face_defaults() -> void:
 func _reset_face_node(node_name: String) -> Node3D:
     if visual_root == null:
         return null
-    var node := visual_root.get_node_or_null(node_name) as Node3D
+    var node := _find_visual_node_by_names(_face_node_aliases(node_name))
     if node == null:
         return null
     if face_base_scales.has(node_name):
@@ -858,6 +970,12 @@ func _update_expression_visual() -> void:
     if blinking or double_blink:
         eye_l.scale.y *= 0.16
         eye_r.scale.y *= 0.16
+
+    # The production GLB already authors full facial/body emotion clips through
+    # the rig. Keep the lightweight blink/customization layer, but do not stack
+    # the fallback's procedural emotion poses on top of those clips.
+    if model_animation_player != null:
+        return
 
     match emotion:
         "Happy":
