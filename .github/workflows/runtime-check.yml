@@ -44,6 +44,16 @@ jobs:
             exit 1
           fi
 
+      - name: Validate production Nim asset
+        run: |
+          set -o pipefail
+          ./godot --headless --path . --script ci/nim_asset_smoke.gd 2>&1 | tee nim-asset.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|NIM ASSET TEST" nim-asset.log; then
+            echo "Production Nim asset test failed"
+            exit 1
+          fi
+          grep -q "NIM V12.1 ASSET SMOKE PASSED" nim-asset.log
+
       - name: Exercise household life loop
         run: |
           set -o pipefail
