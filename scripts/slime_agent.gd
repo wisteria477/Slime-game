@@ -104,6 +104,8 @@ var face_base_scales: Dictionary = {}
 var face_base_rotations: Dictionary = {}
 var appearance_base_scales: Dictionary = {}
 var appearance_base_materials: Dictionary = {}
+var model_animation_player: AnimationPlayer
+var model_animation_name := ""
 var is_selected_visual := false
 
 func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref, personality_value := "Bubbly", habits_value: Array[String] = [], appearance_value: Dictionary = {}) -> void:
@@ -433,6 +435,8 @@ func _build_character() -> void:
             model.rotation_degrees.y = 180.0
             visual_root.add_child(model)
             _tint_recursive(model)
+            model_animation_player = _find_animation_player(model)
+            _play_model_animation_if_available("Idle")
         else:
             _make_fallback_slime()
     else:
@@ -550,6 +554,41 @@ func _tint_recursive(node: Node) -> void:
     for child in node.get_children():
         _tint_recursive(child)
 
+func _find_animation_player(node: Node) -> AnimationPlayer:
+    if node is AnimationPlayer:
+        return node as AnimationPlayer
+    for child in node.get_children():
+        var found := _find_animation_player(child)
+        if found:
+            return found
+    return null
+
+func _play_model_animation_if_available(requested: String) -> void:
+    if model_animation_player == null:
+        return
+    var target := requested
+    if not model_animation_player.has_animation(target):
+        target = "Idle"
+    if not model_animation_player.has_animation(target):
+        return
+    if model_animation_name != target or not model_animation_player.is_playing():
+        model_animation_player.play(target, 0.16)
+        model_animation_name = target
+
+func _sync_model_animation() -> void:
+    if model_animation_player == null:
+        return
+    var requested := "Idle"
+    if action_kind in ["energy", "sleep"]:
+        requested = "Tired"
+    elif action_kind in ["fun", "hobby"]:
+        requested = "Happy"
+    elif emotion in ["Happy", "Sad", "Angry", "Scared", "Tired", "Flirty"]:
+        requested = emotion
+    elif emotion in ["Playful", "Energized"]:
+        requested = "Happy"
+    _play_model_animation_if_available(requested)
+
 func _apply_age_scale() -> void:
     if visual_root == null:
         return
@@ -600,6 +639,7 @@ func _animate_idle() -> void:
         _animate_emotion_body(now)
 
     _animate_soft_parts(now, horizontal_speed > 0.08)
+    _sync_model_animation()
     _update_expression_visual()
 
 func _animate_soft_parts(now: float, moving: bool) -> void:
