@@ -102,6 +102,10 @@ var base_visual_scale := Vector3.ONE
 var idle_phase := 0.0
 var face_base_scales: Dictionary = {}
 var face_base_rotations: Dictionary = {}
+var appearance_base_scales: Dictionary = {}
+var appearance_base_materials: Dictionary = {}
+var model_animation_player: AnimationPlayer
+var model_animation_name := ""
 var is_selected_visual := false
 
 func setup(id_value: String, name_value: String, color_value: Color, stage: String, build_ref: SlimeBuildSystem, household_ref, personality_value := "Bubbly", habits_value: Array[String] = [], appearance_value: Dictionary = {}) -> void:
@@ -126,9 +130,10 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     wants = SlimeLifeRules.random_wants(rng, 3)
     fears = [SlimeLifeRules.random_fear(rng)]
     _build_character()
-    _capture_face_defaults()
+    _capture_appearance_defaults()
     _apply_age_scale()
     _apply_appearance()
+    _capture_face_defaults()
     _update_emotion()
 
 func _physics_process(_delta: float) -> void:
@@ -402,6 +407,9 @@ func restore(data: Dictionary) -> void:
     global_position = Vector3(float(pos[0]), float(pos[1]), float(pos[2]))
     _apply_age_scale()
     _apply_appearance()
+    face_base_scales.clear()
+    face_base_rotations.clear()
+    _capture_face_defaults()
     if life_state == "ghost":
         _set_ghost_visual(true)
 
@@ -424,9 +432,13 @@ func _build_character() -> void:
             var model: Node = (packed as PackedScene).instantiate()
             model.name = "NimModel"
             model.scale = Vector3.ONE * 0.43
-            model.rotation_degrees.y = 180.0
+            model.rotation_degrees.y = 0.0
             visual_root.add_child(model)
             _tint_recursive(model)
+            _polish_imported_nim(model)
+            _make_imported_core_glow()
+            model_animation_player = _find_animation_player(model)
+            _play_model_animation_if_available("Idle")
         else:
             _make_fallback_slime()
     else:
@@ -457,52 +469,61 @@ func _build_character() -> void:
     add_child(state_label)
 
 func _make_fallback_slime() -> void:
+    # The final approved GLB can replace this at any time. Until then, the
+    # fallback should still read as one soft, cohesive creature on a phone.
     var jelly := StandardMaterial3D.new()
-    jelly.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, 0.90)
-    jelly.roughness = 0.14
+    jelly.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, 0.84)
+    jelly.roughness = 0.10
     jelly.metallic = 0.0
     jelly.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 
-    _blob("Torso", Vector3(0, 0.62, 0), Vector3(0.58, 0.70, 0.50), jelly)
-    _blob("Head", Vector3(0, 1.28, 0), Vector3(0.84, 0.73, 0.72), jelly)
-    _blob("ArmL", Vector3(-0.63, 0.74, -0.02), Vector3(0.22, 0.34, 0.22), jelly)
-    _blob("ArmR", Vector3(0.63, 0.74, -0.02), Vector3(0.22, 0.34, 0.22), jelly)
-    _blob("FootL", Vector3(-0.28, 0.18, -0.03), Vector3(0.36, 0.18, 0.34), jelly)
-    _blob("FootR", Vector3(0.28, 0.18, -0.03), Vector3(0.36, 0.18, 0.34), jelly)
-    _blob("AntennaBase", Vector3(0.09, 1.93, 0.01), Vector3(0.18, 0.28, 0.17), jelly, Vector3(0, 0, -18))
-    _blob("AntennaTip", Vector3(0.23, 2.11, 0.01), Vector3(0.15, 0.17, 0.15), jelly)
+    _blob("Puddle", Vector3(0, 0.17, 0.03), Vector3(0.61, 0.16, 0.54), jelly)
+    _blob("Torso", Vector3(0, 0.66, 0), Vector3(0.60, 0.66, 0.53), jelly)
+    _blob("Head", Vector3(0, 1.25, -0.01), Vector3(0.82, 0.70, 0.70), jelly)
+    _blob("ArmL", Vector3(-0.61, 0.72, -0.02), Vector3(0.20, 0.27, 0.20), jelly, Vector3(0, 0, 18))
+    _blob("ArmR", Vector3(0.61, 0.72, -0.02), Vector3(0.20, 0.27, 0.20), jelly, Vector3(0, 0, -18))
+    _blob("FootL", Vector3(-0.26, 0.20, -0.05), Vector3(0.33, 0.16, 0.31), jelly)
+    _blob("FootR", Vector3(0.26, 0.20, -0.05), Vector3(0.33, 0.16, 0.31), jelly)
+    _blob("AntennaBase", Vector3(0.09, 1.88, 0.01), Vector3(0.16, 0.25, 0.15), jelly, Vector3(0, 0, -18))
+    _blob("AntennaTip", Vector3(0.22, 2.04, 0.01), Vector3(0.14, 0.16, 0.14), jelly)
+
+    var bubble_mat := StandardMaterial3D.new()
+    bubble_mat.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, 0.60)
+    bubble_mat.roughness = 0.06
+    bubble_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    _blob("Bubble", Vector3(0.43, 1.91, -0.01), Vector3(0.11, 0.11, 0.11), bubble_mat)
 
     var eye_mat := StandardMaterial3D.new()
     eye_mat.albedo_color = Color("172437")
     eye_mat.roughness = 0.12
-    _blob("EyeL", Vector3(-0.28, 1.34, -0.62), Vector3(0.12, 0.19, 0.08), eye_mat)
-    _blob("EyeR", Vector3(0.28, 1.34, -0.62), Vector3(0.12, 0.19, 0.08), eye_mat)
+    _blob("EyeL", Vector3(-0.27, 1.32, -0.61), Vector3(0.12, 0.18, 0.075), eye_mat)
+    _blob("EyeR", Vector3(0.27, 1.32, -0.61), Vector3(0.12, 0.18, 0.075), eye_mat)
 
     var white := StandardMaterial3D.new()
     white.albedo_color = Color.WHITE
     white.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    _blob("EyeHighlightL", Vector3(-0.32, 1.40, -0.70), Vector3(0.035, 0.05, 0.025), white)
-    _blob("EyeHighlightR", Vector3(0.24, 1.40, -0.70), Vector3(0.035, 0.05, 0.025), white)
+    _blob("EyeHighlightL", Vector3(-0.31, 1.38, -0.685), Vector3(0.034, 0.047, 0.023), white)
+    _blob("EyeHighlightR", Vector3(0.23, 1.38, -0.685), Vector3(0.034, 0.047, 0.023), white)
 
     var mouth_mat := StandardMaterial3D.new()
     mouth_mat.albedo_color = Color("263247")
     mouth_mat.roughness = 0.2
-    _blob("Mouth", Vector3(0, 1.08, -0.66), Vector3(0.14, 0.07, 0.045), mouth_mat)
+    _blob("Mouth", Vector3(0, 1.07, -0.65), Vector3(0.135, 0.065, 0.042), mouth_mat)
 
     var cheek := StandardMaterial3D.new()
-    cheek.albedo_color = Color(1.0, 0.58, 0.68, 0.68)
+    cheek.albedo_color = Color(1.0, 0.58, 0.68, 0.62)
     cheek.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     cheek.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    _blob("CheekL", Vector3(-0.46, 1.10, -0.61), Vector3(0.12, 0.06, 0.035), cheek)
-    _blob("CheekR", Vector3(0.46, 1.10, -0.61), Vector3(0.12, 0.06, 0.035), cheek)
+    _blob("CheekL", Vector3(-0.45, 1.09, -0.60), Vector3(0.11, 0.055, 0.032), cheek)
+    _blob("CheekR", Vector3(0.45, 1.09, -0.60), Vector3(0.11, 0.055, 0.032), cheek)
 
     var core_mat := StandardMaterial3D.new()
-    core_mat.albedo_color = Color(1.0, 0.83, 0.42, 0.52)
+    core_mat.albedo_color = Color(1.0, 0.83, 0.42, 0.46)
     core_mat.emission_enabled = true
     core_mat.emission = Color(1.0, 0.72, 0.24)
-    core_mat.emission_energy_multiplier = 0.65
+    core_mat.emission_energy_multiplier = 0.52
     core_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    _blob("Core", Vector3(0, 0.69, -0.12), Vector3(0.18, 0.25, 0.14), core_mat)
+    _blob("Core", Vector3(0, 0.68, -0.11), Vector3(0.17, 0.23, 0.13), core_mat)
 
 func _blob(name_value: String, position_value: Vector3, scale_value: Vector3, material: Material, rotation_value := Vector3.ZERO) -> void:
     var part := MeshInstance3D.new()
@@ -530,10 +551,193 @@ func _tint_recursive(node: Node) -> void:
                 var copy := active.duplicate()
                 var material_name := String(active.resource_name)
                 if copy is StandardMaterial3D and (material_name.contains("Slime") or mesh_node.name.contains("Body") or mesh_node.name.contains("Bubble")):
-                    copy.albedo_color = slime_color
+                    var standard_copy := copy as StandardMaterial3D
+                    var authored_alpha := standard_copy.albedo_color.a
+                    standard_copy.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, authored_alpha)
                 mesh_node.set_surface_override_material(surface, copy)
     for child in node.get_children():
         _tint_recursive(child)
+
+func _polish_imported_nim(model: Node) -> void:
+    # The authored GLB contains the silhouette/rig/expressions. These runtime
+    # material and presentation adjustments keep it readable under the game's
+    # mobile-friendly Godot lighting without baking camera-specific tricks into
+    # the source asset.
+    var body := _find_visual_node_by_names_from(model, ["SK_Nim_Body"]) as MeshInstance3D
+    if body and body.mesh:
+        body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+        for surface in range(body.mesh.get_surface_count()):
+            var active := body.get_active_material(surface)
+            if active is StandardMaterial3D:
+                var tuned := active.duplicate(true) as StandardMaterial3D
+                var body_color := slime_color.darkened(0.10)
+                tuned.albedo_color = Color(body_color.r, body_color.g, body_color.b, 1.0)
+                tuned.roughness = 0.11
+                tuned.metallic = 0.0
+                tuned.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+                body.set_surface_override_material(surface, tuned)
+
+    # These authored face pieces sit just above the jelly surface. Let the body
+    # lighting create depth; tiny hard shadows from them read as dark stickers.
+    for detail_name in [
+        "Nim_Eye_L", "Nim_Eye_R", "Nim_Mouth",
+        "Nim_Cheek_L", "Nim_Cheek_R",
+        "Nim_EyeHighlight_L", "Nim_EyeHighlight_R",
+        "Nim_EyeHighlight2_L", "Nim_EyeHighlight2_R",
+        "Nim_FloatingBubble"
+    ]:
+        var detail := _find_visual_node_by_names_from(model, [detail_name])
+        if detail is MeshInstance3D:
+            (detail as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+    # The white mesh shine patches were useful in Blender material preview but
+    # look like flat decals in Godot. Natural specular highlights are cleaner.
+    for shine_name in ["Nim_HeadShine_L", "Nim_HeadShine_Dot"]:
+        var shine := _find_visual_node_by_names_from(model, [shine_name])
+        if shine:
+            shine.visible = false
+
+    var mouth := _find_visual_node_by_names_from(model, ["Nim_Mouth"])
+    if mouth:
+        mouth.scale.z *= 0.38
+
+    # The source GLB keeps a true internal cloud for higher-end material work,
+    # but an opaque mobile-safe body cannot reveal it reliably. Hide it here and
+    # use a tiny front-surface glow that preserves Nim's warm-core signature.
+    var source_core_meshes: Array[MeshInstance3D] = []
+    _collect_visual_meshes(model, [], ["Nim_InnerCore_"], source_core_meshes)
+    for core in source_core_meshes:
+        core.visible = false
+        core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+func _make_imported_core_glow() -> void:
+    if visual_root == null:
+        return
+
+    var core := MeshInstance3D.new()
+    core.name = "CoreSurface"
+    var quad := QuadMesh.new()
+    quad.size = Vector2(0.25, 0.22)
+    core.mesh = quad
+    core.position = Vector3(0.0, 0.315, 0.205)
+    core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+    var shader := Shader.new()
+    shader.code = """
+shader_type spatial;
+render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;
+
+uniform vec4 core_color : source_color = vec4(1.0, 0.84, 0.48, 0.46);
+uniform float glow_strength = 0.28;
+
+float soft_blob(vec2 p, vec2 center, vec2 radius) {
+    vec2 d = (p - center) / radius;
+    float dist = length(d);
+    return 1.0 - smoothstep(0.58, 1.0, dist);
+}
+
+void fragment() {
+    vec2 uv = UV;
+    float cloud = 0.0;
+    cloud = max(cloud, soft_blob(uv, vec2(0.50, 0.53), vec2(0.28, 0.31)));
+    cloud = max(cloud, soft_blob(uv, vec2(0.34, 0.48), vec2(0.20, 0.23)));
+    cloud = max(cloud, soft_blob(uv, vec2(0.66, 0.48), vec2(0.20, 0.23)));
+    cloud = max(cloud, soft_blob(uv, vec2(0.50, 0.69), vec2(0.19, 0.20)));
+    float edge_softness = smoothstep(0.0, 0.16, cloud);
+    ALBEDO = core_color.rgb;
+    EMISSION = core_color.rgb * glow_strength * edge_softness;
+    ALPHA = core_color.a * cloud;
+}
+"""
+
+    var material := ShaderMaterial.new()
+    material.shader = shader
+    material.set_shader_parameter("core_color", Color(1.0, 0.84, 0.48, 0.46))
+    material.set_shader_parameter("glow_strength", 0.28)
+    core.material_override = material
+    visual_root.add_child(core)
+func _find_visual_node_by_names(names: Array) -> Node3D:
+    if visual_root == null:
+        return null
+    return _find_visual_node_by_names_from(visual_root, names)
+
+func _find_visual_node_by_names_from(node: Node, names: Array) -> Node3D:
+    if node is Node3D and names.has(String(node.name)):
+        return node as Node3D
+    for child in node.get_children():
+        var found := _find_visual_node_by_names_from(child, names)
+        if found:
+            return found
+    return null
+
+func _collect_visual_meshes(node: Node, exact_names: Array, prefixes: Array, output: Array[MeshInstance3D]) -> void:
+    if node is MeshInstance3D:
+        var mesh_node := node as MeshInstance3D
+        var node_name := String(mesh_node.name)
+        var matches := exact_names.has(node_name)
+        if not matches:
+            for prefix in prefixes:
+                if node_name.begins_with(String(prefix)):
+                    matches = true
+                    break
+        if matches:
+            output.append(mesh_node)
+    for child in node.get_children():
+        _collect_visual_meshes(child, exact_names, prefixes, output)
+
+func _core_meshes() -> Array[MeshInstance3D]:
+    var result: Array[MeshInstance3D] = []
+    if visual_root:
+        _collect_visual_meshes(visual_root, ["Core", "CoreSurface"], ["Nim_InnerCore_"], result)
+    return result
+
+func _find_animation_player(node: Node) -> AnimationPlayer:
+    if node is AnimationPlayer:
+        return node as AnimationPlayer
+    for child in node.get_children():
+        var found := _find_animation_player(child)
+        if found:
+            return found
+    return null
+
+func _resolve_model_animation_name(requested: String) -> String:
+    if model_animation_player == null:
+        return ""
+    if model_animation_player.has_animation(requested):
+        return requested
+    var needle := requested.to_lower()
+    for candidate in model_animation_player.get_animation_list():
+        var candidate_name := String(candidate)
+        var lowered := candidate_name.to_lower()
+        if lowered == needle or lowered.ends_with("/" + needle) or lowered.ends_with("|" + needle):
+            return candidate_name
+    return ""
+
+func _play_model_animation_if_available(requested: String) -> void:
+    if model_animation_player == null:
+        return
+    var target := _resolve_model_animation_name(requested)
+    if target.is_empty():
+        target = _resolve_model_animation_name("Idle")
+    if target.is_empty():
+        return
+    if model_animation_name != target or not model_animation_player.is_playing():
+        model_animation_player.play(target, 0.16)
+        model_animation_name = target
+
+func _sync_model_animation() -> void:
+    if model_animation_player == null:
+        return
+    var requested := "Idle"
+    if action_kind in ["energy", "sleep"]:
+        requested = "Tired"
+    elif action_kind in ["fun", "hobby"]:
+        requested = "Happy"
+    elif emotion in ["Happy", "Sad", "Angry", "Scared", "Tired", "Flirty"]:
+        requested = emotion
+    elif emotion in ["Playful", "Energized"]:
+        requested = "Happy"
+    _play_model_animation_if_available(requested)
 
 func _apply_age_scale() -> void:
     if visual_root == null:
@@ -567,10 +771,81 @@ func _animate_idle() -> void:
         base_visual_scale.z * (1.0 - pulse * 0.35)
     )
 
-    if not action_kind.is_empty() and path.is_empty():
-        _animate_current_action(now)
+    # Let the creature's mass visibly compress and rebound while walking.
+    # Root-level deformation remains compatible with the future approved GLB.
+    var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+    if horizontal_speed > 0.08:
+        var stride := sin(now * 2.35)
+        var compression := maxf(0.0, -stride)
+        visual_root.position.y = maxf(0.0, stride) * 0.085
+        visual_root.rotation.z = stride * 0.028
+        visual_root.scale.x *= 1.0 + compression * 0.055
+        visual_root.scale.y *= 1.0 - compression * 0.075
+        visual_root.scale.z *= 1.0 + compression * 0.040
 
+    if not action_kind.is_empty() and path.is_empty():
+        var authored_action := model_animation_player != null and action_kind in ["energy", "sleep", "fun", "hobby"]
+        if not authored_action:
+            _animate_current_action(now)
+    elif path.is_empty() and horizontal_speed <= 0.08 and model_animation_player == null:
+        _animate_emotion_body(now)
+
+    _animate_soft_parts(now, horizontal_speed > 0.08)
+    _sync_model_animation()
     _update_expression_visual()
+
+func _animate_soft_parts(now: float, moving: bool) -> void:
+    if visual_root == null:
+        return
+    var antenna_base := visual_root.get_node_or_null("AntennaBase") as Node3D
+    var antenna_tip := visual_root.get_node_or_null("AntennaTip") as Node3D
+    var bubble := visual_root.get_node_or_null("Bubble") as Node3D
+    if antenna_base:
+        antenna_base.rotation_degrees.z = -18.0 + sin(now * 0.82) * (7.0 if moving else 3.0)
+    if antenna_tip:
+        antenna_tip.rotation_degrees.z = sin(now * 0.95 + 0.7) * (9.0 if moving else 4.0)
+    if bubble:
+        var drift_strength := 0.032 if moving else 0.018
+        bubble.position.x = 0.43 + sin(now * 0.56 + 1.1) * drift_strength
+        bubble.position.y = 1.91 + cos(now * 0.48 + 0.4) * (0.035 if moving else 0.022)
+
+func _animate_emotion_body(now: float) -> void:
+    # Nim's approved emotion sheet changes the whole jelly silhouette, not just
+    # the facial features. Keep these deformations restrained so gameplay
+    # remains readable and the same code also works with an authored GLB.
+    match emotion:
+        "Happy":
+            visual_root.position.y += maxf(0.0, sin(now * 0.85)) * 0.025
+            visual_root.rotation.z += sin(now * 0.62) * 0.016
+        "Playful":
+            visual_root.position.y += maxf(0.0, sin(now * 1.35)) * 0.035
+            visual_root.rotation.z += sin(now * 1.05) * 0.055
+        "Sad":
+            visual_root.scale.x *= 1.04
+            visual_root.scale.y *= 0.94
+            visual_root.scale.z *= 1.03
+            visual_root.position.y -= 0.015
+        "Angry":
+            visual_root.scale.x *= 1.035
+            visual_root.scale.y *= 1.025
+            visual_root.scale.z *= 0.985
+            visual_root.rotation.z += sin(now * 2.8) * 0.012
+        "Embarrassed":
+            visual_root.scale.x *= 0.97
+            visual_root.scale.y *= 0.965
+            visual_root.scale.z *= 0.97
+            visual_root.position.y -= 0.012
+        "Tired":
+            visual_root.scale.x *= 1.13
+            visual_root.scale.y *= 0.79
+            visual_root.scale.z *= 1.10
+            visual_root.position.y -= 0.035
+        "Energized":
+            var hop := maxf(0.0, sin(now * 1.65))
+            visual_root.position.y += hop * 0.050
+            visual_root.scale.y *= 1.0 + hop * 0.025
+        _:
+            pass
 
 func _animate_current_action(now: float) -> void:
     var beat := sin(now * 1.55)
@@ -621,9 +896,100 @@ func _animate_current_action(now: float) -> void:
         _:
             pass
 
+func _capture_appearance_defaults() -> void:
+    appearance_base_scales.clear()
+    appearance_base_materials.clear()
+    if visual_root == null:
+        return
+
+    for aliases in [
+        ["EyeL", "Nim_Eye_L"],
+        ["EyeR", "Nim_Eye_R"],
+        ["AntennaTip", "Nim_Antenna"],
+    ]:
+        var node := _find_visual_node_by_names(aliases)
+        if node:
+            var relative_path := String(visual_root.get_path_to(node))
+            appearance_base_scales[relative_path] = node.scale
+
+    for core in _core_meshes():
+        var relative_path := String(visual_root.get_path_to(core))
+        var snapshot := {}
+        if core.material_override:
+            snapshot["material_override"] = core.material_override.duplicate(true)
+        var surfaces: Array = []
+        if core.mesh:
+            for surface in range(core.mesh.get_surface_count()):
+                var active := core.get_active_material(surface)
+                surfaces.append(active.duplicate(true) if active else null)
+        snapshot["surfaces"] = surfaces
+        appearance_base_materials[relative_path] = snapshot
+
+func _reset_appearance_defaults() -> void:
+    if visual_root == null:
+        return
+
+    for relative_path in appearance_base_scales.keys():
+        var node := visual_root.get_node_or_null(NodePath(String(relative_path))) as Node3D
+        if node:
+            node.scale = appearance_base_scales[relative_path]
+
+    for relative_path in appearance_base_materials.keys():
+        var core := visual_root.get_node_or_null(NodePath(String(relative_path))) as MeshInstance3D
+        if core == null:
+            continue
+        var snapshot: Dictionary = appearance_base_materials[relative_path]
+        if snapshot.has("material_override") and snapshot["material_override"] is Material:
+            core.material_override = (snapshot["material_override"] as Material).duplicate(true)
+        else:
+            core.material_override = null
+        var surfaces: Array = snapshot.get("surfaces", [])
+        if core.mesh:
+            for surface in range(core.mesh.get_surface_count()):
+                core.set_surface_override_material(surface, null)
+                if surface < surfaces.size() and surfaces[surface] is Material:
+                    core.set_surface_override_material(surface, (surfaces[surface] as Material).duplicate(true))
+
+func _style_core_material(material: StandardMaterial3D, core_style: String) -> void:
+    if core_style == "Cool":
+        material.emission_enabled = true
+        material.emission = Color("8be7ff")
+        material.albedo_color = Color(0.52, 0.90, 1.0, material.albedo_color.a)
+    elif core_style == "Bright":
+        material.emission_enabled = true
+        material.emission_energy_multiplier *= 2.15
+
+func _apply_core_style(core: MeshInstance3D, core_style: String) -> void:
+    if core.material_override is ShaderMaterial:
+        var shader_mat := core.material_override as ShaderMaterial
+        if core_style == "Cool":
+            shader_mat.set_shader_parameter("core_color", Color(0.52, 0.90, 1.0, 0.48))
+            shader_mat.set_shader_parameter("glow_strength", 0.30)
+        elif core_style == "Bright":
+            shader_mat.set_shader_parameter("core_color", Color(1.0, 0.86, 0.50, 0.58))
+            shader_mat.set_shader_parameter("glow_strength", 0.48)
+        return
+    if core.material_override is StandardMaterial3D:
+        _style_core_material(core.material_override as StandardMaterial3D, core_style)
+        return
+    if core.mesh == null:
+        return
+    for surface in range(core.mesh.get_surface_count()):
+        var active := core.get_active_material(surface)
+        if active is StandardMaterial3D:
+            var styled := active.duplicate(true) as StandardMaterial3D
+            _style_core_material(styled, core_style)
+            core.set_surface_override_material(surface, styled)
+
 func _apply_appearance() -> void:
     if visual_root == null:
         return
+
+    # Appearance application must be idempotent. Save restoration and creator
+    # previews may apply the same choices more than once.
+    _reset_appearance_defaults()
+    base_visual_scale = Vector3.ONE * (0.64 if age_stage == "baby" else 1.0)
+
     var size_name := String(appearance.get("size", "Standard"))
     var size_mult := 1.0
     if size_name == "Tiny":
@@ -632,8 +998,8 @@ func _apply_appearance() -> void:
         size_mult = 1.16
     base_visual_scale *= size_mult
 
-    var eye_l := visual_root.get_node_or_null("EyeL") as Node3D
-    var eye_r := visual_root.get_node_or_null("EyeR") as Node3D
+    var eye_l := _find_visual_node_by_names(["EyeL", "Nim_Eye_L"])
+    var eye_r := _find_visual_node_by_names(["EyeR", "Nim_Eye_R"])
     var eye_style := String(appearance.get("eyes", "Round"))
     if eye_l and eye_r:
         if eye_style == "Sleepy":
@@ -643,29 +1009,41 @@ func _apply_appearance() -> void:
             eye_l.scale *= 1.18
             eye_r.scale *= 1.18
 
-    var core := visual_root.get_node_or_null("Core") as MeshInstance3D
-    if core and core.material_override is StandardMaterial3D:
-        var mat := core.material_override as StandardMaterial3D
-        var core_style := String(appearance.get("core", "Warm"))
-        if core_style == "Cool":
-            mat.emission = Color("8be7ff")
-            mat.albedo_color = Color(0.52, 0.90, 1.0, 0.55)
-        elif core_style == "Bright":
-            mat.emission_energy_multiplier = 1.35
+    var core_style := String(appearance.get("core", "Warm"))
+    if core_style != "Warm":
+        for core in _core_meshes():
+            _apply_core_style(core, core_style)
 
-    var antenna_tip := visual_root.get_node_or_null("AntennaTip") as Node3D
-    if antenna_tip:
+    var antenna := _find_visual_node_by_names(["AntennaTip", "Nim_Antenna"])
+    if antenna:
         var antenna_style := String(appearance.get("antenna", "Curl"))
         if antenna_style == "Droplet":
-            antenna_tip.scale.y *= 1.45
+            antenna.scale.y *= 1.45 if String(antenna.name) == "AntennaTip" else 1.18
         elif antenna_style == "Bubble":
-            antenna_tip.scale *= 1.35
+            antenna.scale *= 1.35 if String(antenna.name) == "AntennaTip" else 1.15
+
+func _face_node_aliases(node_name: String) -> Array:
+    match node_name:
+        "EyeL":
+            return ["EyeL", "Nim_Eye_L"]
+        "EyeR":
+            return ["EyeR", "Nim_Eye_R"]
+        "Mouth":
+            return ["Mouth", "Nim_Mouth"]
+        "CheekL":
+            return ["CheekL", "Nim_Cheek_L"]
+        "CheekR":
+            return ["CheekR", "Nim_Cheek_R"]
+        _:
+            return [node_name]
 
 func _capture_face_defaults() -> void:
     if visual_root == null:
         return
+    face_base_scales.clear()
+    face_base_rotations.clear()
     for node_name in ["EyeL", "EyeR", "Mouth", "CheekL", "CheekR"]:
-        var node := visual_root.get_node_or_null(node_name) as Node3D
+        var node := _find_visual_node_by_names(_face_node_aliases(node_name))
         if node:
             face_base_scales[node_name] = node.scale
             face_base_rotations[node_name] = node.rotation
@@ -673,7 +1051,7 @@ func _capture_face_defaults() -> void:
 func _reset_face_node(node_name: String) -> Node3D:
     if visual_root == null:
         return null
-    var node := visual_root.get_node_or_null(node_name) as Node3D
+    var node := _find_visual_node_by_names(_face_node_aliases(node_name))
     if node == null:
         return null
     if face_base_scales.has(node_name):
@@ -693,11 +1071,68 @@ func _update_expression_visual() -> void:
     if eye_l == null or eye_r == null or mouth == null:
         return
 
-    var blink_wave := sin(Time.get_ticks_msec() * 0.0017 + idle_phase * 2.0)
-    var blinking := blink_wave > 0.985
-    if blinking:
+    var seconds := Time.get_ticks_msec() * 0.001
+    var blink_period := 3.4 + absf(sin(idle_phase * 1.73)) * 2.2
+    var blink_phase := fmod(seconds + idle_phase, blink_period)
+    var blinking := blink_phase < 0.105
+    var double_blink := sin(idle_phase * 2.31) > 0.45 and blink_phase > 0.20 and blink_phase < 0.275
+    if blinking or double_blink:
         eye_l.scale.y *= 0.16
         eye_r.scale.y *= 0.16
+
+    # The production GLB supplies the full-body emotion motion. Reinforce only
+    # the face here because GLTF bone-axis conversion makes the authored facial
+    # bone scaling subtler than it was in Blender.
+    if model_animation_player != null:
+        match emotion:
+            "Happy":
+                eye_l.scale.y *= 0.68
+                eye_r.scale.y *= 0.68
+                eye_l.rotation.z -= 0.05
+                eye_r.rotation.z += 0.05
+                mouth.scale.x *= 1.16
+                mouth.scale.y *= 0.82
+            "Playful":
+                eye_l.scale.y *= 0.72
+                eye_r.scale.y *= 0.48
+                eye_l.rotation.z -= 0.08
+                eye_r.rotation.z -= 0.08
+                mouth.scale.x *= 1.20
+                mouth.scale.y *= 0.88
+            "Sad":
+                eye_l.scale.y *= 0.78
+                eye_r.scale.y *= 0.78
+                eye_l.rotation.z += 0.12
+                eye_r.rotation.z -= 0.12
+                mouth.scale.x *= 0.80
+                mouth.scale.y *= 0.55
+            "Angry":
+                eye_l.scale.y *= 0.58
+                eye_r.scale.y *= 0.58
+                eye_l.rotation.z += 0.23
+                eye_r.rotation.z -= 0.23
+                mouth.scale.x *= 0.86
+                mouth.scale.y *= 0.48
+            "Scared":
+                eye_l.scale *= 1.10
+                eye_r.scale *= 1.10
+                mouth.scale.x *= 0.78
+                mouth.scale.y *= 1.28
+            "Tired":
+                eye_l.scale.y *= 0.36
+                eye_r.scale.y *= 0.36
+                eye_l.rotation.z += 0.04
+                eye_r.rotation.z -= 0.04
+                mouth.scale.x *= 0.78
+                mouth.scale.y *= 0.48
+            "Flirty":
+                eye_l.scale.y *= 0.28
+                eye_r.scale.y *= 0.82
+                mouth.scale.x *= 1.08
+                mouth.scale.y *= 0.70
+            _:
+                pass
+        return
 
     match emotion:
         "Happy":
@@ -1128,7 +1563,7 @@ func _move_along_path() -> void:
     if habits.has("Slow Starter"):
         speed *= 0.88
     var direction := flat_delta.normalized()
-    var target_yaw := atan2(direction.x, direction.z) + PI
+    var target_yaw := atan2(direction.x, direction.z)
     rotation.y = lerp_angle(rotation.y, target_yaw, 0.18)
     velocity = direction * speed
     velocity.y = 0.0
@@ -1197,7 +1632,7 @@ func _perform_action(delta: float) -> void:
             var face_delta: Vector3 = other.global_position - global_position
             face_delta.y = 0.0
             if face_delta.length() > 0.05:
-                rotation.y = lerp_angle(rotation.y, atan2(face_delta.x, face_delta.z) + PI, 0.15)
+                rotation.y = lerp_angle(rotation.y, atan2(face_delta.x, face_delta.z), 0.15)
             needs["social"] = clampf(float(needs["social"]) + 8.0 * delta, 0.0, NEED_MAX)
             other.needs["social"] = clampf(float(other.needs["social"]) + 4.0 * delta, 0.0, NEED_MAX)
             relationships[other.slime_id] = float(relationships.get(other.slime_id, 0.0)) + 1.0 * delta
