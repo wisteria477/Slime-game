@@ -614,14 +614,15 @@ func _make_imported_core_glow() -> void:
     if visual_root == null:
         return
     var core_mat := StandardMaterial3D.new()
-    core_mat.albedo_color = Color(1.0, 0.88, 0.62, 0.28)
-    core_mat.roughness = 0.28
-    core_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    core_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    core_mat.albedo_color = Color(1.0, 0.86, 0.50, 1.0)
+    core_mat.roughness = 0.26
     core_mat.emission_enabled = true
-    core_mat.emission = Color(1.0, 0.77, 0.38)
-    core_mat.emission_energy_multiplier = 0.18
-    _blob("CoreSurface_0", Vector3(0.000, 0.318, 0.205), Vector3(0.105, 0.095, 0.012), core_mat)
+    core_mat.emission = Color(1.0, 0.76, 0.34)
+    core_mat.emission_energy_multiplier = 0.16
+    _blob("CoreSurface_0", Vector3(0.000, 0.315, 0.170), Vector3(0.064, 0.074, 0.040), core_mat)
+    _blob("CoreSurface_1", Vector3(-0.043, 0.302, 0.168), Vector3(0.045, 0.052, 0.035), core_mat)
+    _blob("CoreSurface_2", Vector3(0.043, 0.302, 0.168), Vector3(0.045, 0.052, 0.035), core_mat)
+    _blob("CoreSurface_3", Vector3(0.000, 0.354, 0.169), Vector3(0.044, 0.050, 0.034), core_mat)
 
 func _find_visual_node_by_names(names: Array) -> Node3D:
     if visual_root == null:
