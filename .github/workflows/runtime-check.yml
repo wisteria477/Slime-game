@@ -54,6 +54,27 @@ jobs:
           fi
           grep -q "NIM V12.1 ASSET SMOKE PASSED" nim-asset.log
 
+      - name: Capture production Nim visual QA
+        run: |
+          set -o pipefail
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 ./godot --path . --rendering-method gl_compatibility --script ci/nim_visual_capture.gd 2>&1 | tee nim-visual.log
+          if grep -E "SCRIPT ERROR|Parse Error|Compile Error|NIM VISUAL QA:" nim-visual.log; then
+            echo "Production Nim visual capture failed"
+            exit 1
+          fi
+          grep -q "NIM VISUAL QA CAPTURE PASSED" nim-visual.log
+          test -s ci/output/nim_visual_qa/nim_idle.png
+          test -s ci/output/nim_visual_qa/nim_happy.png
+          test -s ci/output/nim_visual_qa/nim_sad.png
+          test -s ci/output/nim_visual_qa/nim_tired.png
+
+      - name: Upload Nim visual QA
+        uses: actions/upload-artifact@v4
+        with:
+          name: nim-visual-qa
+          path: ci/output/nim_visual_qa/*.png
+          if-no-files-found: error
+
       - name: Exercise household life loop
         run: |
           set -o pipefail
