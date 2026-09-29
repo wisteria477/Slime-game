@@ -76,11 +76,23 @@ func _run() -> void:
 
     var holder := Node3D.new()
     holder.name = "NimHolder"
-    holder.rotation_degrees.y = 0.0
     viewport.add_child(holder)
 
-    var model := packed.instantiate()
-    holder.add_child(model)
+    var slime := SlimeAgent.new()
+    holder.add_child(slime)
+    slime.setup(
+        "visual_qa",
+        "Nim",
+        Color("68d7ff"),
+        "adult",
+        null,
+        null,
+        "Bubbly",
+        [],
+        {"size":"Standard", "eyes":"Round", "core":"Warm", "antenna":"Curl"}
+    )
+    slime.sim_enabled = false
+    slime.set_physics_process(false)
 
     var key_light := DirectionalLight3D.new()
     key_light.rotation_degrees = Vector3(-34.0, -28.0, 0.0)
@@ -96,13 +108,13 @@ func _run() -> void:
     viewport.add_child(fill_light)
 
     var camera := Camera3D.new()
-    camera.position = Vector3(0.0, 1.35, 4.2)
+    camera.position = Vector3(0.0, 0.68, 2.15)
     camera.fov = 34.0
     viewport.add_child(camera)
-    camera.look_at(Vector3(0.0, 1.25, 0.0), Vector3.UP)
+    camera.look_at(Vector3(0.0, 0.64, 0.0), Vector3.UP)
     camera.current = true
 
-    var player := _find_animation_player(model)
+    var player := _find_animation_player(slime)
     if player == null:
         _fail("production Nim model has no AnimationPlayer")
         _finish()
