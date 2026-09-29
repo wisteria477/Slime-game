@@ -126,9 +126,9 @@ func setup(id_value: String, name_value: String, color_value: Color, stage: Stri
     wants = SlimeLifeRules.random_wants(rng, 3)
     fears = [SlimeLifeRules.random_fear(rng)]
     _build_character()
-    _capture_face_defaults()
     _apply_age_scale()
     _apply_appearance()
+    _capture_face_defaults()
     _update_emotion()
 
 func _physics_process(_delta: float) -> void:
@@ -402,6 +402,9 @@ func restore(data: Dictionary) -> void:
     global_position = Vector3(float(pos[0]), float(pos[1]), float(pos[2]))
     _apply_age_scale()
     _apply_appearance()
+    face_base_scales.clear()
+    face_base_rotations.clear()
+    _capture_face_defaults()
     if life_state == "ghost":
         _set_ghost_visual(true)
 
@@ -457,52 +460,55 @@ func _build_character() -> void:
     add_child(state_label)
 
 func _make_fallback_slime() -> void:
+    # The final approved GLB can replace this at any time. Until then, the
+    # fallback should still read as one soft, cohesive creature on a phone.
     var jelly := StandardMaterial3D.new()
-    jelly.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, 0.90)
-    jelly.roughness = 0.14
+    jelly.albedo_color = Color(slime_color.r, slime_color.g, slime_color.b, 0.84)
+    jelly.roughness = 0.10
     jelly.metallic = 0.0
     jelly.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 
-    _blob("Torso", Vector3(0, 0.62, 0), Vector3(0.58, 0.70, 0.50), jelly)
-    _blob("Head", Vector3(0, 1.28, 0), Vector3(0.84, 0.73, 0.72), jelly)
-    _blob("ArmL", Vector3(-0.63, 0.74, -0.02), Vector3(0.22, 0.34, 0.22), jelly)
-    _blob("ArmR", Vector3(0.63, 0.74, -0.02), Vector3(0.22, 0.34, 0.22), jelly)
-    _blob("FootL", Vector3(-0.28, 0.18, -0.03), Vector3(0.36, 0.18, 0.34), jelly)
-    _blob("FootR", Vector3(0.28, 0.18, -0.03), Vector3(0.36, 0.18, 0.34), jelly)
-    _blob("AntennaBase", Vector3(0.09, 1.93, 0.01), Vector3(0.18, 0.28, 0.17), jelly, Vector3(0, 0, -18))
-    _blob("AntennaTip", Vector3(0.23, 2.11, 0.01), Vector3(0.15, 0.17, 0.15), jelly)
+    _blob("Puddle", Vector3(0, 0.17, 0.03), Vector3(0.61, 0.16, 0.54), jelly)
+    _blob("Torso", Vector3(0, 0.66, 0), Vector3(0.60, 0.66, 0.53), jelly)
+    _blob("Head", Vector3(0, 1.25, -0.01), Vector3(0.82, 0.70, 0.70), jelly)
+    _blob("ArmL", Vector3(-0.61, 0.72, -0.02), Vector3(0.20, 0.27, 0.20), jelly, Vector3(0, 0, 18))
+    _blob("ArmR", Vector3(0.61, 0.72, -0.02), Vector3(0.20, 0.27, 0.20), jelly, Vector3(0, 0, -18))
+    _blob("FootL", Vector3(-0.26, 0.20, -0.05), Vector3(0.33, 0.16, 0.31), jelly)
+    _blob("FootR", Vector3(0.26, 0.20, -0.05), Vector3(0.33, 0.16, 0.31), jelly)
+    _blob("AntennaBase", Vector3(0.09, 1.88, 0.01), Vector3(0.16, 0.25, 0.15), jelly, Vector3(0, 0, -18))
+    _blob("AntennaTip", Vector3(0.22, 2.04, 0.01), Vector3(0.14, 0.16, 0.14), jelly)
 
     var eye_mat := StandardMaterial3D.new()
     eye_mat.albedo_color = Color("172437")
     eye_mat.roughness = 0.12
-    _blob("EyeL", Vector3(-0.28, 1.34, -0.62), Vector3(0.12, 0.19, 0.08), eye_mat)
-    _blob("EyeR", Vector3(0.28, 1.34, -0.62), Vector3(0.12, 0.19, 0.08), eye_mat)
+    _blob("EyeL", Vector3(-0.27, 1.32, -0.61), Vector3(0.12, 0.18, 0.075), eye_mat)
+    _blob("EyeR", Vector3(0.27, 1.32, -0.61), Vector3(0.12, 0.18, 0.075), eye_mat)
 
     var white := StandardMaterial3D.new()
     white.albedo_color = Color.WHITE
     white.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    _blob("EyeHighlightL", Vector3(-0.32, 1.40, -0.70), Vector3(0.035, 0.05, 0.025), white)
-    _blob("EyeHighlightR", Vector3(0.24, 1.40, -0.70), Vector3(0.035, 0.05, 0.025), white)
+    _blob("EyeHighlightL", Vector3(-0.31, 1.38, -0.685), Vector3(0.034, 0.047, 0.023), white)
+    _blob("EyeHighlightR", Vector3(0.23, 1.38, -0.685), Vector3(0.034, 0.047, 0.023), white)
 
     var mouth_mat := StandardMaterial3D.new()
     mouth_mat.albedo_color = Color("263247")
     mouth_mat.roughness = 0.2
-    _blob("Mouth", Vector3(0, 1.08, -0.66), Vector3(0.14, 0.07, 0.045), mouth_mat)
+    _blob("Mouth", Vector3(0, 1.07, -0.65), Vector3(0.135, 0.065, 0.042), mouth_mat)
 
     var cheek := StandardMaterial3D.new()
-    cheek.albedo_color = Color(1.0, 0.58, 0.68, 0.68)
+    cheek.albedo_color = Color(1.0, 0.58, 0.68, 0.62)
     cheek.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
     cheek.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    _blob("CheekL", Vector3(-0.46, 1.10, -0.61), Vector3(0.12, 0.06, 0.035), cheek)
-    _blob("CheekR", Vector3(0.46, 1.10, -0.61), Vector3(0.12, 0.06, 0.035), cheek)
+    _blob("CheekL", Vector3(-0.45, 1.09, -0.60), Vector3(0.11, 0.055, 0.032), cheek)
+    _blob("CheekR", Vector3(0.45, 1.09, -0.60), Vector3(0.11, 0.055, 0.032), cheek)
 
     var core_mat := StandardMaterial3D.new()
-    core_mat.albedo_color = Color(1.0, 0.83, 0.42, 0.52)
+    core_mat.albedo_color = Color(1.0, 0.83, 0.42, 0.46)
     core_mat.emission_enabled = true
     core_mat.emission = Color(1.0, 0.72, 0.24)
-    core_mat.emission_energy_multiplier = 0.65
+    core_mat.emission_energy_multiplier = 0.52
     core_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    _blob("Core", Vector3(0, 0.69, -0.12), Vector3(0.18, 0.25, 0.14), core_mat)
+    _blob("Core", Vector3(0, 0.68, -0.11), Vector3(0.17, 0.23, 0.13), core_mat)
 
 func _blob(name_value: String, position_value: Vector3, scale_value: Vector3, material: Material, rotation_value := Vector3.ZERO) -> void:
     var part := MeshInstance3D.new()
@@ -567,10 +573,33 @@ func _animate_idle() -> void:
         base_visual_scale.z * (1.0 - pulse * 0.35)
     )
 
+    # Let the creature's mass visibly compress and rebound while walking.
+    # Root-level deformation remains compatible with the future approved GLB.
+    var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+    if horizontal_speed > 0.08:
+        var stride := sin(now * 2.35)
+        var compression := maxf(0.0, -stride)
+        visual_root.position.y = maxf(0.0, stride) * 0.085
+        visual_root.rotation.z = stride * 0.028
+        visual_root.scale.x *= 1.0 + compression * 0.055
+        visual_root.scale.y *= 1.0 - compression * 0.075
+        visual_root.scale.z *= 1.0 + compression * 0.040
+
     if not action_kind.is_empty() and path.is_empty():
         _animate_current_action(now)
 
+    _animate_soft_parts(now, horizontal_speed > 0.08)
     _update_expression_visual()
+
+func _animate_soft_parts(now: float, moving: bool) -> void:
+    if visual_root == null:
+        return
+    var antenna_base := visual_root.get_node_or_null("AntennaBase") as Node3D
+    var antenna_tip := visual_root.get_node_or_null("AntennaTip") as Node3D
+    if antenna_base:
+        antenna_base.rotation_degrees.z = -18.0 + sin(now * 0.82) * (7.0 if moving else 3.0)
+    if antenna_tip:
+        antenna_tip.rotation_degrees.z = sin(now * 0.95 + 0.7) * (9.0 if moving else 4.0)
 
 func _animate_current_action(now: float) -> void:
     var beat := sin(now * 1.55)
@@ -693,9 +722,12 @@ func _update_expression_visual() -> void:
     if eye_l == null or eye_r == null or mouth == null:
         return
 
-    var blink_wave := sin(Time.get_ticks_msec() * 0.0017 + idle_phase * 2.0)
-    var blinking := blink_wave > 0.985
-    if blinking:
+    var seconds := Time.get_ticks_msec() * 0.001
+    var blink_period := 3.4 + absf(sin(idle_phase * 1.73)) * 2.2
+    var blink_phase := fmod(seconds + idle_phase, blink_period)
+    var blinking := blink_phase < 0.105
+    var double_blink := sin(idle_phase * 2.31) > 0.45 and blink_phase > 0.20 and blink_phase < 0.275
+    if blinking or double_blink:
         eye_l.scale.y *= 0.16
         eye_r.scale.y *= 0.16
 
