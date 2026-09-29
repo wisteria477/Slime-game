@@ -45,6 +45,14 @@ func _run() -> void:
     await process_frame
 
     _check(household.slimes.size() == 2, "two adults should exist")
+    _check(a.visual_root != null and b.visual_root != null, "slimes should build a visual root")
+    # Appearance-specific face nodes are optional for a future authored GLB. When
+    # the procedural face is active, Wide eyes must remain part of the animation
+    # reset baseline instead of being erased on the next expression update.
+    if a.face_base_scales.has("EyeL") and b.face_base_scales.has("EyeL"):
+        var round_eye_scale: Vector3 = a.face_base_scales.get("EyeL", Vector3.ZERO)
+        var wide_eye_scale: Vector3 = b.face_base_scales.get("EyeL", Vector3.ZERO)
+        _check(wide_eye_scale.y > round_eye_scale.y * 1.10, "Wide eye appearance should survive facial animation baselining")
     _check(build.find_furniture("bed", a.current_cell()).size() > 0, "starter home needs a reachable bed")
     _check(build.find_furniture("stove", a.current_cell()).size() > 0, "starter home needs a reachable stove")
     _check(build.find_furniture("toilet", a.current_cell()).size() > 0, "starter home needs a reachable toilet")
