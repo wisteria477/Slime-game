@@ -57,7 +57,7 @@ jobs:
       - name: Capture production Nim visual QA
         run: |
           set -o pipefail
-          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 ./godot --path . --rendering-method gl_compatibility --script ci/nim_visual_capture.gd 2>&1 | tee nim-visual.log
+          timeout 45s xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 ./godot --path . --rendering-method gl_compatibility --script ci/nim_visual_capture.gd 2>&1 | tee nim-visual.log
           if grep -E "SCRIPT ERROR|Parse Error|Compile Error|NIM VISUAL QA:" nim-visual.log; then
             echo "Production Nim visual capture failed"
             exit 1
