@@ -436,6 +436,7 @@ func _build_character() -> void:
             visual_root.add_child(model)
             _tint_recursive(model)
             _polish_imported_nim(model)
+            _make_imported_core_glow()
             model_animation_player = _find_animation_player(model)
             _play_model_animation_if_available("Idle")
         else:
@@ -570,10 +571,10 @@ func _polish_imported_nim(model: Node) -> void:
             if active is StandardMaterial3D:
                 var tuned := active.duplicate(true) as StandardMaterial3D
                 var body_color := slime_color.darkened(0.10)
-                tuned.albedo_color = Color(body_color.r, body_color.g, body_color.b, 0.90)
-                tuned.roughness = 0.14
+                tuned.albedo_color = Color(body_color.r, body_color.g, body_color.b, 1.0)
+                tuned.roughness = 0.11
                 tuned.metallic = 0.0
-                tuned.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+                tuned.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
                 body.set_surface_override_material(surface, tuned)
 
     # These authored face pieces sit just above the jelly surface. Let the body
@@ -600,19 +601,29 @@ func _polish_imported_nim(model: Node) -> void:
     if mouth:
         mouth.scale.z *= 0.38
 
-    # Keep the internal cloud warm but prevent its emission from blowing out the
-    # translucent body on lower-end/mobile renderers.
-    var core_meshes: Array[MeshInstance3D] = []
-    _collect_visual_meshes(model, [], ["Nim_InnerCore_"], core_meshes)
-    for core in core_meshes:
+    # The source GLB keeps a true internal cloud for higher-end material work,
+    # but an opaque mobile-safe body cannot reveal it reliably. Hide it here and
+    # use a tiny front-surface glow that preserves Nim's warm-core signature.
+    var source_core_meshes: Array[MeshInstance3D] = []
+    _collect_visual_meshes(model, [], ["Nim_InnerCore_"], source_core_meshes)
+    for core in source_core_meshes:
+        core.visible = false
         core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        if core.mesh:
-            for surface in range(core.mesh.get_surface_count()):
-                var core_active := core.get_active_material(surface)
-                if core_active is StandardMaterial3D:
-                    var core_mat := core_active.duplicate(true) as StandardMaterial3D
-                    core_mat.emission_energy_multiplier = minf(core_mat.emission_energy_multiplier, 0.75)
-                    core.set_surface_override_material(surface, core_mat)
+
+func _make_imported_core_glow() -> void:
+    if visual_root == null:
+        return
+    var core_mat := StandardMaterial3D.new()
+    core_mat.albedo_color = Color(1.0, 0.84, 0.46, 0.68)
+    core_mat.roughness = 0.22
+    core_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    core_mat.emission_enabled = true
+    core_mat.emission = Color(1.0, 0.72, 0.28)
+    core_mat.emission_energy_multiplier = 0.55
+    _blob("CoreSurface_0", Vector3(0.000, 0.310, 0.205), Vector3(0.072, 0.086, 0.018), core_mat)
+    _blob("CoreSurface_1", Vector3(-0.050, 0.300, 0.208), Vector3(0.052, 0.062, 0.016), core_mat)
+    _blob("CoreSurface_2", Vector3(0.050, 0.298, 0.208), Vector3(0.052, 0.062, 0.016), core_mat)
+    _blob("CoreSurface_3", Vector3(0.000, 0.365, 0.205), Vector3(0.054, 0.058, 0.016), core_mat)
 
 func _find_visual_node_by_names(names: Array) -> Node3D:
     if visual_root == null:
@@ -646,7 +657,7 @@ func _collect_visual_meshes(node: Node, exact_names: Array, prefixes: Array, out
 func _core_meshes() -> Array[MeshInstance3D]:
     var result: Array[MeshInstance3D] = []
     if visual_root:
-        _collect_visual_meshes(visual_root, ["Core"], ["Nim_InnerCore_"], result)
+        _collect_visual_meshes(visual_root, ["Core"], ["Nim_InnerCore_", "CoreSurface_"], result)
     return result
 
 func _find_animation_player(node: Node) -> AnimationPlayer:
